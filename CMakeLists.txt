@@ -3,4 +3,11 @@ project(Raytracing)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_executable(Raytracing main.cpp)
+add_subdirectory(glm)
+
+add_executable(Raytracing
+        main.cpp
+        geometry/geometry.cpp
+        geometry/geometry.h)
+
+target_link_libraries(Raytracing PUBLIC glm)
