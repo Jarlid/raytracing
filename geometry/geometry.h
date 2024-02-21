@@ -13,24 +13,39 @@
 
 // TODO: убрать утечки памяти
 
-class Geometry{};
+struct Geometry{
+    virtual float get_t(glm::vec3 O, glm::vec3 D) = 0;
+    // Формула: P = O + t * D
+};
 
 struct Plane: Geometry {
-    float nx, ny, nz;
+private:
+    glm::vec3* _n;
 
+public:
     explicit Plane(std::istream* in_stream);
+
+    float get_t(glm::vec3 O, glm::vec3 D) override;
 };
 
 struct Ellipsoid: Geometry {
-    float rx, ry, rz;
+private:
+    glm::vec3* _r;
 
+public:
     explicit Ellipsoid(std::istream* in_stream);
+
+    float get_t(glm::vec3 O, glm::vec3 D) override;
 };
 
 struct Box: Geometry {
-    float sx, sy, sz;
+private:
+    glm::vec3* _s;
 
+public:
     explicit Box(std::istream* in_stream);
+
+    float get_t(glm::vec3 O, glm::vec3 D) override;
 };
 
 class Primitive {
@@ -44,6 +59,10 @@ private:
 
 public:
     explicit Primitive(std::istream* in_stream);
+
+    float get_t(glm::vec3 O, glm::vec3 D);
+
+    glm::vec3* color();
 };
 
 class Scene {
@@ -64,4 +83,9 @@ private:
 
 public:
     explicit Scene(std::ifstream* in_stream);
+
+    std::vector<uint8_t> render() const;
+
+    int width() const;
+    int height() const;
 };

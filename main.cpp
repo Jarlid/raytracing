@@ -14,6 +14,17 @@ int main(int argc, char* argv[]) {
 
     std::ifstream in_stream(in_file, std::ios_base::in);
     Scene scene(&in_stream);
+    in_stream.close();
+
+    std::ofstream out_stream(out_file, std::ios_base::out);
+
+    out_stream << "P6" << std::endl;
+    out_stream << scene.width() << " " << scene.height() << std::endl;
+    out_stream << 255 << std::endl;
+    for (auto elem : scene.render())
+        out_stream << elem;
+
+    out_stream.close();
 
     return 0;
 }
