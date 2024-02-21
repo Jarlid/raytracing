@@ -198,7 +198,7 @@ std::vector<uint8_t> Scene::render() const {
     for (int p_x = 0; p_x < _dimension_width; ++p_x) {
         for (int p_y = 0; p_y < _dimension_height; ++p_y) {
             float c_x = (2 * ((float) p_x + 0.5f) / (float) _dimension_width - 1) * tan_half_fov_x;
-            float c_y = (2 * ((float) p_y + 0.5f) / (float) _dimension_height - 1) * tan_half_fov_y;
+            float c_y = -1 * (2 * ((float) p_y + 0.5f) / (float) _dimension_height - 1) * tan_half_fov_y;
             float c_z = 1;
 
             glm::vec3 D = glm::normalize(c_x * *_camera_right + c_y * *_camera_up + c_z * *_camera_forward);
