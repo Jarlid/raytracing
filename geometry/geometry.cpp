@@ -117,8 +117,8 @@ Primitive::Primitive(std::istream* in_stream) {
 float Primitive::get_t(glm::vec3 O, glm::vec3 D) {
     O -= *_position;
 
-    rotate(O, *conjugate_quat(*_rotation));
-    rotate(D, *conjugate_quat(*_rotation));
+    O = *rotate(O, *conjugate_quat(*_rotation));
+    D = *rotate(D, *conjugate_quat(*_rotation));
 
     return _geometry->get_t(O, D);
 }
