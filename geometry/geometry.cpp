@@ -5,29 +5,16 @@
 #include <sstream>
 #include <algorithm>
 
-glm::vec3* vec3(std::istream* in_stream) {
+glm::vec3* stream_vec3(std::istream* in_stream) {
     float x, y, z = 0;
     *in_stream >> x >> y >> z;
     return new glm::vec3(x, y, z);
 }
 
-glm::quat* quat(std::istream* in_stream) {
+glm::quat* stream_quat(std::istream* in_stream) {
     float x, y, z, w = 0;
     *in_stream >> x >> y >> z >> w;
     return new glm::quat(w, x, y, z);
-}
-
-float scalar(const glm::vec3 a, const glm::vec3 b) {
-    return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-glm::quat* conjugate_quat(const glm::quat q) {
-    return new glm::quat(q.w, -q.x, -q.y, -q.z);
-}
-
-glm::vec3* rotate(const glm::vec3 v, const glm::quat q) {
-    glm::quat tmp = q * glm::quat(0, v) * *conjugate_quat(q);
-    return new glm::vec3(tmp.x, tmp.y, tmp.z);
 }
 
 float pick_t(float t1, float t2) {
@@ -47,11 +34,11 @@ uint8_t fix_color(float value) {
 }
 
 Plane::Plane(std::istream* in_stream) {
-    _n = vec3(in_stream);
+    _n = stream_vec3(in_stream);
 }
 
 float Plane::get_t(glm::vec3 O, glm::vec3 D) {
-    return -1 * scalar(O, *_n) / scalar(D, *_n);
+    return -1 * glm::dot(O, *_n) / glm::dot(D, *_n);
 }
 
 glm::vec3* Plane::get_normal(glm::vec3 P) {
@@ -59,13 +46,13 @@ glm::vec3* Plane::get_normal(glm::vec3 P) {
 }
 
 Ellipsoid::Ellipsoid(std::istream* in_stream) {
-    _r = vec3(in_stream);
+    _r = stream_vec3(in_stream);
 }
 
 float Ellipsoid::get_t(glm::vec3 O, glm::vec3 D) {
-    float a = scalar(D / *_r, D / *_r);
-    float b = 2 * scalar(O / *_r, D / *_r);
-    float c = scalar(O / *_r, O / *_r) - 1;
+    float a = glm::dot(D / *_r, D / *_r);
+    float b = 2 * glm::dot(O / *_r, D / *_r);
+    float c = glm::dot(O / *_r, O / *_r) - 1;
     float d = b * b - 4 * a * c;
 
     if (d < 0)
@@ -82,7 +69,7 @@ glm::vec3* Ellipsoid::get_normal(glm::vec3 P) {
 }
 
 Box::Box(std::istream* in_stream) {
-    _s = vec3(in_stream);
+    _s = stream_vec3(in_stream);
 }
 
 float Box::get_t(glm::vec3 O, glm::vec3 D) {
@@ -135,11 +122,11 @@ Primitive::Primitive(std::istream* in_stream) {
         else if (command == "BOX")
             _geometry = new Box(in_stream);
         else if (command == "COLOR")
-            _color = vec3(in_stream);
+            _color = stream_vec3(in_stream);
         else if (command == "POSITION")
-            _position = vec3(in_stream);
+            _position = stream_vec3(in_stream);
         else if (command == "ROTATION")
-            _rotation = quat(in_stream);
+            _rotation = stream_quat(in_stream);
         else if (command == "METALLIC")
             _material = Material::METALLIC;
         else if (command == "DIELECTRIC")
@@ -152,17 +139,21 @@ Primitive::Primitive(std::istream* in_stream) {
 float Primitive::get_t(glm::vec3 O, glm::vec3 D) {
     O -= *_position;
 
-    O = *rotate(O, *conjugate_quat(*_rotation));
-    D = *rotate(D, *conjugate_quat(*_rotation));
+    glm::quat reverse_rotation = glm::conjugate(*_rotation);
+
+    O = glm::rotate(reverse_rotation, O);
+    D = glm::rotate(reverse_rotation, D);
 
     return _geometry->get_t(O, D);
 }
 
 glm::vec3* Primitive::get_normal(glm::vec3 P) {
-    P -= *_position;
-    P = *rotate(P, *conjugate_quat(*_rotation));
+    glm::quat reverse_rotation = glm::conjugate(*_rotation);
 
-    return rotate(*_geometry->get_normal(P), *_rotation);
+    P -= *_position;
+    P = glm::rotate(reverse_rotation, P);
+
+    return new glm::vec3(glm::normalize(glm::rotate(*_rotation, *_geometry->get_normal(P))));
 }
 
 glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& scene) {
@@ -192,14 +183,14 @@ LightSource::LightSource(std::istream *in_stream) {
         std::transform(command.begin(), command.end(), command.begin(), ::toupper);
 
         if (command == "LIGHT_INTENSITY")
-            _light_intensity = vec3(in_stream);
+            _light_intensity = stream_vec3(in_stream);
         else if (command == "LIGHT_DIRECTION") {
             _light_source_type = LightSourceType::DIRECTIONAL;
-            _light_direction = vec3(in_stream);
+            _light_direction = stream_vec3(in_stream);
         }
         else if (command == "LIGHT_POSITION") {
             _light_source_type = LightSourceType::POINT;
-            _light_position = vec3(in_stream);
+            _light_position = stream_vec3(in_stream);
         }
         else if (command == "LIGHT_ATTENUATION") {
             _light_source_type = LightSourceType::POINT;
@@ -218,7 +209,7 @@ glm::vec3 *LightSource::diffused_light(glm::vec3 P, glm::vec3 N) {
         light_intensity = light_intensity / (c0 + c1 * R + c2 * R * R);
     }
 
-    float cos = scalar(glm::normalize(*light_direction), glm::normalize(N));
+    float cos = glm::dot(glm::normalize(*light_direction), glm::normalize(N));
     if (cos < 0)
         return new glm::vec3(0);
     return new glm::vec3(cos * light_intensity);
@@ -243,24 +234,24 @@ Scene::Scene(std::ifstream* in_stream) {
         }
         else if (command == "BG_COLOR") {
             not_primitive_or_light = true;
-            _bg_color = vec3(in_stream);
+            _bg_color = stream_vec3(in_stream);
         }
         else if (command == "CAMERA_POSITION") {
             not_primitive_or_light = true;
-            _camera_position = vec3(in_stream);
+            _camera_position = stream_vec3(in_stream);
         }
         else if (command == "CAMERA_RIGHT" || command == "CAMERA_WRONG") {
             // We support not only camera rights, but also camera wrongs!
             not_primitive_or_light = true;
-            _camera_right = vec3(in_stream);
+            _camera_right = stream_vec3(in_stream);
         }
         else if (command == "CAMERA_UP") {
             not_primitive_or_light = true;
-            _camera_up = vec3(in_stream);
+            _camera_up = stream_vec3(in_stream);
         }
         else if (command == "CAMERA_FORWARD") {
             not_primitive_or_light = true;
-            _camera_forward = vec3(in_stream);
+            _camera_forward = stream_vec3(in_stream);
         }
         else if (command == "CAMERA_FOV_X") {
             not_primitive_or_light = true;
@@ -268,7 +259,7 @@ Scene::Scene(std::ifstream* in_stream) {
         }
         else if (command == "AMBIENT_LIGHT") {
             not_primitive_or_light = true;
-            _ambient_light = vec3(in_stream);
+            _ambient_light = stream_vec3(in_stream);
         }
 
         if (not_primitive_or_light || command == "NEW_PRIMITIVE" || command == "NEW_LIGHT") {
