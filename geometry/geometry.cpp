@@ -40,10 +40,10 @@ float pick_t(float t1, float t2) {
 }
 
 uint8_t fix_color(float value) {
-    auto tmp = uint8_t(std::round(value * 255));
+    auto tmp = std::round(value * 255);
     if (tmp > 255)
         tmp = 255;
-    return tmp;
+    return (int8_t) tmp;
 }
 
 Plane::Plane(std::istream* in_stream) {
@@ -52,6 +52,10 @@ Plane::Plane(std::istream* in_stream) {
 
 float Plane::get_t(glm::vec3 O, glm::vec3 D) {
     return -1 * scalar(O, *_n) / scalar(D, *_n);
+}
+
+glm::vec3* Plane::get_normal(glm::vec3 P) {
+    return new glm::vec3(glm::normalize(*_n));
 }
 
 Ellipsoid::Ellipsoid(std::istream* in_stream) {
@@ -71,6 +75,10 @@ float Ellipsoid::get_t(glm::vec3 O, glm::vec3 D) {
 
     float t1 = (-1 * b + sqrtf(d)) / (2 * a), t2 = (-1 * b - sqrtf(d)) / (2 * a);
     return pick_t(t1, t2);
+}
+
+glm::vec3* Ellipsoid::get_normal(glm::vec3 P) {
+    return new glm::vec3(glm::normalize(P / *_r));
 }
 
 Box::Box(std::istream* in_stream) {
@@ -93,6 +101,27 @@ float Box::get_t(glm::vec3 O, glm::vec3 D) {
     return pick_t(t1, t2);
 }
 
+glm::vec3* Box::get_normal(glm::vec3 P) {
+    glm::vec3 nP = P / *_s;
+    glm::vec3 anP = glm::abs(P / *_s);
+
+    if (anP.x >= anP.y and anP.x >= anP.z) {
+        if (nP.x > 0)
+            return new glm::vec3(1, 0, 0);
+        return new glm::vec3(-1, 0, 0);
+    }
+
+    if (anP.y >= anP.x and anP.y >= anP.z){
+        if (nP.y > 0)
+            return new glm::vec3(0, 1, 0);
+        return new glm::vec3(0, -1, 0);
+    }
+
+    if (nP.z > 0)
+        return new glm::vec3(0, 0, 1);
+    return new glm::vec3(0, 0, -1);
+}
+
 Primitive::Primitive(std::istream* in_stream) {
     std::string command;
 
@@ -111,6 +140,12 @@ Primitive::Primitive(std::istream* in_stream) {
             _position = vec3(in_stream);
         else if (command == "ROTATION")
             _rotation = quat(in_stream);
+        else if (command == "METALLIC")
+            _material = Material::METALLIC;
+        else if (command == "DIELECTRIC")
+            _material = Material::DIELECTRIC;
+        else if (command == "IOR")
+            *in_stream >> _ior;
     }
 }
 
@@ -123,66 +158,144 @@ float Primitive::get_t(glm::vec3 O, glm::vec3 D) {
     return _geometry->get_t(O, D);
 }
 
-glm::vec3* Primitive::color() {
-    return _color;
+glm::vec3* Primitive::get_normal(glm::vec3 P) {
+    P -= *_position;
+    P = *rotate(P, *conjugate_quat(*_rotation));
+
+    return rotate(*_geometry->get_normal(P), *_rotation);
+}
+
+glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& scene) {
+    glm::vec3 P = O + t * D;
+    glm::vec3 N = *get_normal(P);
+
+    if (_material == Material::METALLIC) {
+        return _color; // TODO
+    }
+
+    if (_material == Material::DIELECTRIC) {
+        return _color; // TODO
+    }
+
+    // if (_material == Material::DIFFUSER)
+    auto total_light = new glm::vec3(*scene.ambient_light());
+    for (auto light_source: scene.light_sources())
+        *total_light += *light_source->diffused_light(P, N);
+    *total_light *= *_color;
+    return total_light;
+}
+
+LightSource::LightSource(std::istream *in_stream) {
+    std::string command;
+
+    while (*in_stream >> command) {
+        std::transform(command.begin(), command.end(), command.begin(), ::toupper);
+
+        if (command == "LIGHT_INTENSITY")
+            _light_intensity = vec3(in_stream);
+        else if (command == "LIGHT_DIRECTION") {
+            _light_source_type = LightSourceType::DIRECTIONAL;
+            _light_direction = vec3(in_stream);
+        }
+        else if (command == "LIGHT_POSITION") {
+            _light_source_type = LightSourceType::POINT;
+            _light_position = vec3(in_stream);
+        }
+        else if (command == "LIGHT_ATTENUATION") {
+            _light_source_type = LightSourceType::POINT;
+            *in_stream >> c0 >> c1 >> c2;
+        }
+    }
+}
+
+glm::vec3 *LightSource::diffused_light(glm::vec3 P, glm::vec3 N) {
+    glm::vec3* light_direction = _light_direction;
+    glm::vec3 light_intensity = *_light_intensity;
+
+    if (_light_source_type == LightSourceType::POINT) {
+        light_direction = new glm::vec3(*_light_position - P); // это направление НА свет.
+        float R = glm::length(*light_direction);
+        light_intensity = light_intensity / (c0 + c1 * R + c2 * R * R);
+    }
+
+    float cos = scalar(glm::normalize(*light_direction), glm::normalize(N));
+    if (cos < 0)
+        return new glm::vec3(0);
+    return new glm::vec3(cos * light_intensity);
 }
 
 Scene::Scene(std::ifstream* in_stream) {
     std::string command;
     std::stringstream* primitive_stream;
+    std::stringstream* light_stream;
 
     bool new_primitive = false;
+    bool new_light = false;
 
     while (*in_stream >> command) {
         std::transform(command.begin(), command.end(), command.begin(), ::toupper);
 
-        bool not_primitive = false;
+        bool not_primitive_or_light = false;
 
         if (command == "DIMENSIONS") {
-            not_primitive = true;
+            not_primitive_or_light = true;
             *in_stream >> _dimension_width >> _dimension_height;
         }
         else if (command == "BG_COLOR") {
-            not_primitive = true;
+            not_primitive_or_light = true;
             _bg_color = vec3(in_stream);
         }
         else if (command == "CAMERA_POSITION") {
-            not_primitive = true;
+            not_primitive_or_light = true;
             _camera_position = vec3(in_stream);
         }
         else if (command == "CAMERA_RIGHT" || command == "CAMERA_WRONG") {
             // We support not only camera rights, but also camera wrongs!
-            not_primitive = true;
+            not_primitive_or_light = true;
             _camera_right = vec3(in_stream);
         }
         else if (command == "CAMERA_UP") {
-            not_primitive = true;
+            not_primitive_or_light = true;
             _camera_up = vec3(in_stream);
         }
         else if (command == "CAMERA_FORWARD") {
-            not_primitive = true;
+            not_primitive_or_light = true;
             _camera_forward = vec3(in_stream);
         }
         else if (command == "CAMERA_FOV_X") {
-            not_primitive = true;
+            not_primitive_or_light = true;
             *in_stream >> _camera_fov_x;
         }
-
-        if ((not_primitive || command == "NEW_PRIMITIVE") && new_primitive) {
-            new_primitive = false;
-            _primitives.push_back(new Primitive(primitive_stream));
+        else if (command == "AMBIENT_LIGHT") {
+            not_primitive_or_light = true;
+            _ambient_light = vec3(in_stream);
         }
-        if (not_primitive)
+
+        if (not_primitive_or_light || command == "NEW_PRIMITIVE" || command == "NEW_LIGHT") {
+            if (new_primitive) {
+                new_primitive = false;
+                _primitives.push_back(new Primitive(primitive_stream));
+            }
+            if (new_light) {
+                new_light = false;
+                _light_sources.push_back(new LightSource(light_stream));
+            }
+        }
+        if (not_primitive_or_light)
             continue;
 
         if (command == "NEW_PRIMITIVE") {
             new_primitive = true;
             primitive_stream = new std::stringstream();
         }
-        else if (new_primitive) {
-            *primitive_stream << command;
-            *primitive_stream << " ";
+        else if (command == "NEW_LIGHT") {
+            new_light = true;
+            light_stream = new std::stringstream();
         }
+        else if (new_primitive)
+            *primitive_stream << command << " ";
+        else if (new_light)
+            *light_stream << command << " ";
     }
 
     if (new_primitive)
@@ -205,18 +318,20 @@ std::vector<uint8_t> Scene::render() const {
             glm::vec3 O = *_camera_position;
 
             float t = -1;
+            Primitive* curr_primitive = nullptr;
             glm::vec3* curr_color;
 
             for (auto primitive : _primitives) {
                 float new_t = primitive->get_t(O, D);
                 if (t <= 0 or (new_t > 0 and new_t < t)) {
                     t = new_t;
-                    curr_color = primitive->color();
+                    curr_primitive = primitive;
                 }
             }
-            if (t <= 0) {
+            if (t <= 0 || curr_primitive == nullptr)
                 curr_color = _bg_color;
-            }
+            else
+                curr_color = curr_primitive->get_color(O, D, t, *this);
 
             int it = 3 * (p_x + p_y * _dimension_width);
             render[it + 0] = fix_color(curr_color->r);
@@ -226,6 +341,14 @@ std::vector<uint8_t> Scene::render() const {
     }
 
     return render;
+}
+
+std::vector<LightSource*> Scene::light_sources() const {
+    return _light_sources;
+}
+
+glm::vec3 *Scene::ambient_light() const {
+    return _ambient_light;
 }
 
 int Scene::width() const {
