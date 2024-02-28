@@ -14,6 +14,7 @@
 // TODO: убрать утечки памяти
 
 #define GAMMA (1 / 2.2)
+#define EPSILON 0.0001
 
 struct Geometry{
     virtual float get_t(glm::vec3 O, glm::vec3 D) = 0;
@@ -100,6 +101,8 @@ private:
 public:
     explicit LightSource(std::istream* in_stream);
 
+    std::pair<glm::vec3*, float> light_direction(glm::vec3 P);
+
     glm::vec3* diffused_light(glm::vec3 P, glm::vec3 N);
 };
 
@@ -124,6 +127,9 @@ private:
 
 public:
     explicit Scene(std::ifstream* in_stream);
+
+    std::pair<float, Primitive*> get_t(glm::vec3 O, glm::vec3 D, float eps) const;
+    std::pair<float, Primitive*> get_t(glm::vec3 O, glm::vec3 D) const;
 
     std::vector<uint8_t> render() const;
 

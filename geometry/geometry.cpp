@@ -4,6 +4,8 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <tuple>
+#include <iostream>
 
 glm::vec3* stream_vec3(std::istream* in_stream) {
     float x, y, z = 0;
@@ -173,6 +175,12 @@ glm::vec3* Primitive::get_normal(glm::vec3 P) {
 glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& scene) {
     glm::vec3 P = O + t * D;
     glm::vec3 N = *get_normal(P);
+    bool inside = false;
+
+    if (glm::dot(D, N) > 0) {
+        N = -N;
+        inside = true;
+    }
 
     if (_material == Material::METALLIC) {
         return _color; // TODO
@@ -184,8 +192,16 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
 
     // if (_material == Material::DIFFUSER)
     auto total_light = new glm::vec3(*scene.ambient_light());
-    for (auto light_source: scene.light_sources())
-        *total_light += *light_source->diffused_light(P, N);
+    for (auto light_source: scene.light_sources()) {
+        glm::vec3* light_direction;
+        float R;
+        std::tie(light_direction, R) = light_source->light_direction(P);
+
+        t = scene.get_t(P, *light_direction, EPSILON).first;
+        if (t < EPSILON or t * glm::length(*light_direction) > R)
+            *total_light += *light_source->diffused_light(P, N);
+    }
+
     *total_light *= *_color;
 
     check_color(*total_light);
@@ -215,17 +231,22 @@ LightSource::LightSource(std::istream *in_stream) {
     }
 }
 
+std::pair<glm::vec3*, float> LightSource::light_direction(glm::vec3 P) {
+    if (_light_source_type == LightSourceType::DIRECTIONAL)
+        return {_light_direction, std::numeric_limits<float>::infinity()};
+    auto light_direction = new glm::vec3(*_light_position - P);
+    return {light_direction, glm::length(*light_direction)};
+}
+
 glm::vec3 *LightSource::diffused_light(glm::vec3 P, glm::vec3 N) {
-    glm::vec3* light_direction = _light_direction;
-    glm::vec3 light_intensity = *_light_intensity;
+    glm::vec3* light_direction_now;
+    float R;
+    std::tie(light_direction_now, R) = light_direction(P);
 
-    if (_light_source_type == LightSourceType::POINT) {
-        light_direction = new glm::vec3(*_light_position - P); // это направление НА свет.
-        float R = glm::length(*light_direction);
-        light_intensity = light_intensity / (c0 + c1 * R + c2 * R * R);
-    }
+    glm::vec3 light_intensity = _light_source_type == LightSourceType::POINT ?
+                                *_light_intensity / (c0 + c1 * R + c2 * R * R) : *_light_intensity;
 
-    float cos = glm::dot(glm::normalize(*light_direction), glm::normalize(N));
+    float cos = glm::dot(glm::normalize(*light_direction_now), glm::normalize(N));
     if (cos < 0)
         return new glm::vec3(0);
     return new glm::vec3(cos * light_intensity);
@@ -309,6 +330,25 @@ Scene::Scene(std::ifstream* in_stream) {
         _primitives.push_back(new Primitive(primitive_stream));
 }
 
+std::pair<float, Primitive*> Scene::get_t(glm::vec3 O, glm::vec3 D, float eps) const {
+    float t = -1;
+    Primitive* curr_primitive = nullptr;
+
+    for (auto primitive : _primitives) {
+        float new_t = primitive->get_t(O, D);
+        if (t <= eps or (new_t > eps and new_t < t)) {
+            t = new_t;
+            curr_primitive = primitive;
+        }
+    }
+
+    return {t, curr_primitive};
+}
+
+std::pair<float, Primitive*> Scene::get_t(glm::vec3 O, glm::vec3 D) const {
+    return get_t(O, D, 0);
+}
+
 std::vector<uint8_t> Scene::render() const {
     std::vector<uint8_t> render(3 * _dimension_width * _dimension_height, 0);
 
@@ -324,17 +364,11 @@ std::vector<uint8_t> Scene::render() const {
             glm::vec3 D = glm::normalize(c_x * *_camera_right + c_y * *_camera_up + c_z * *_camera_forward);
             glm::vec3 O = *_camera_position;
 
-            float t = -1;
-            Primitive* curr_primitive = nullptr;
-            glm::vec3* curr_color;
+            float t;
+            Primitive* curr_primitive;
+            std::tie(t, curr_primitive) = get_t(O, D);
 
-            for (auto primitive : _primitives) {
-                float new_t = primitive->get_t(O, D);
-                if (t <= 0 or (new_t > 0 and new_t < t)) {
-                    t = new_t;
-                    curr_primitive = primitive;
-                }
-            }
+            glm::vec3* curr_color;
             if (t <= 0 || curr_primitive == nullptr)
                 curr_color = _bg_color;
             else
