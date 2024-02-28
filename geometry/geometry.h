@@ -14,7 +14,7 @@
 // TODO: убрать утечки памяти
 
 #define GAMMA (1 / 2.2)
-#define EPSILON 0.0001
+#define EPSILON 0.0001f
 
 struct Geometry{
     virtual float get_t(glm::vec3 O, glm::vec3 D) = 0;
@@ -130,9 +130,9 @@ private:
 public:
     explicit Scene(std::ifstream* in_stream);
 
-    std::pair<float, Primitive*> get_t(glm::vec3 O, glm::vec3 D, float eps) const;
+    std::pair<float, Primitive*> get_t(glm::vec3 O, glm::vec3 D) const;
 
-    glm::vec3* get_color(glm::vec3 O, glm::vec3 D, float eps, int recursion_depth) const;
+    glm::vec3* get_color(glm::vec3 O, glm::vec3 D, int recursion_depth) const;
     glm::vec3* get_color(glm::vec3 O, glm::vec3 D) const;
 
     std::vector<uint8_t> render() const;

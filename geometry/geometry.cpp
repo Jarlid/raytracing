@@ -5,7 +5,6 @@
 #include <sstream>
 #include <algorithm>
 #include <tuple>
-#include <iostream>
 
 glm::vec3* stream_vec3(std::istream* in_stream) {
     float x, y, z = 0;
@@ -185,7 +184,7 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
     if (_material == Material::METALLIC) {
         glm::vec3 new_D = D - 2.f * glm::dot(N, D) * N;
 
-        glm::vec3* color = scene.get_color(P, new_D, EPSILON, recursion_depth + 1);
+        glm::vec3* color = scene.get_color(P + new_D * EPSILON, new_D, recursion_depth + 1);
         *color *= *_color;
 
         check_color(*color);
@@ -193,7 +192,35 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
     }
 
     if (_material == Material::DIELECTRIC) {
-        return _color; // TODO
+        float cos_t1 = - glm::dot(N, glm::normalize(D));
+        float sin_t1 = sqrtf(1 - cos_t1 * cos_t1);
+
+        float n1 = 1, n2 = _ior;
+        if (inside)
+            std::swap(n1, n2);
+
+        float sin_t2 = sin_t1 * n1 / n2;
+
+        glm::vec3 reflected_D = D - 2.f * glm::dot(N, D) * N;
+        glm::vec3* reflected_color =
+                scene.get_color(P + reflected_D * EPSILON, reflected_D, recursion_depth + 1);
+
+        if (sin_t2 > 1)
+            return reflected_color;
+
+        float cos_t2 = sqrtf(1 - sin_t2 * sin_t2);
+
+        glm::vec3 refracted_D = D * n1 / n2 + N * (cos_t1 * n1 / n2 - cos_t2);
+        glm::vec3* refracted_color =
+                scene.get_color(P + refracted_D * EPSILON, refracted_D, recursion_depth + 1);
+
+        float R0 = powf((n1 - n2) / (n1 + n2), 2);
+        float R = R0 + (1 - R0) * powf(1 - cos_t1, 5);
+
+        auto final_color = new glm::vec3(R * *reflected_color + (1 - R) * *refracted_color * *_color);
+
+        check_color(*final_color);
+        return final_color;
     }
 
     // if (_material == Material::DIFFUSER)
@@ -203,8 +230,8 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
         float R;
         std::tie(light_direction, R) = light_source->light_direction(P);
 
-        t = scene.get_t(P, *light_direction, EPSILON).first;
-        if (t < EPSILON or t * glm::length(*light_direction) > R)
+        t = scene.get_t(P + *light_direction * EPSILON, *light_direction).first;
+        if (t < 0 or t * glm::length(*light_direction) > R)
             *total_light += *light_source->diffused_light(P, N);
     }
 
@@ -340,13 +367,13 @@ Scene::Scene(std::ifstream* in_stream) {
         _primitives.push_back(new Primitive(primitive_stream));
 }
 
-std::pair<float, Primitive*> Scene::get_t(glm::vec3 O, glm::vec3 D, float eps) const {
+std::pair<float, Primitive*> Scene::get_t(glm::vec3 O, glm::vec3 D) const {
     float t = -1;
     Primitive* curr_primitive = nullptr;
 
     for (auto primitive : _primitives) {
         float new_t = primitive->get_t(O, D);
-        if (t <= eps or (new_t > eps and new_t < t)) {
+        if (t <= 0 or (new_t > 0 and new_t < t)) {
             t = new_t;
             curr_primitive = primitive;
         }
@@ -355,16 +382,18 @@ std::pair<float, Primitive*> Scene::get_t(glm::vec3 O, glm::vec3 D, float eps) c
     return {t, curr_primitive};
 }
 
-glm::vec3* Scene::get_color(glm::vec3 O, glm::vec3 D, float eps, int recursion_depth) const {
+glm::vec3* Scene::get_color(glm::vec3 O, glm::vec3 D, int recursion_depth) const {
     if (recursion_depth > _ray_depth)
         return new glm::vec3(0);
 
+    D = glm::normalize(D);
+
     float t;
     Primitive* curr_primitive;
-    std::tie(t, curr_primitive) = get_t(O, D, eps);
+    std::tie(t, curr_primitive) = get_t(O, D);
 
     glm::vec3* curr_color;
-    if (t <= eps || curr_primitive == nullptr)
+    if (t <= 0 || curr_primitive == nullptr)
         curr_color = _bg_color;
     else
         curr_color = curr_primitive->get_color(O, D, t, *this, recursion_depth);
@@ -374,7 +403,7 @@ glm::vec3* Scene::get_color(glm::vec3 O, glm::vec3 D, float eps, int recursion_d
 }
 
 glm::vec3* Scene::get_color(glm::vec3 O, glm::vec3 D) const {
-    return get_color(O, D, 0, 1);
+    return get_color(O, D, 1);
 }
 
 std::vector<uint8_t> Scene::render() const {
