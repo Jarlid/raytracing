@@ -81,7 +81,7 @@ float Ellipsoid::get_t(glm::vec3 O, glm::vec3 D) {
 }
 
 glm::vec3* Ellipsoid::get_normal(glm::vec3 P) {
-    return new glm::vec3(glm::normalize(P / *_r));
+    return new glm::vec3(glm::normalize(P / *_r / *_r));
 }
 
 Box::Box(std::istream* in_stream) {
