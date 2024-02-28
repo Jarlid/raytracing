@@ -26,6 +26,14 @@ float pick_t(float t1, float t2) {
     return t1;
 }
 
+glm::vec3 saturate(glm::vec3 const & color) {
+    return glm::clamp(color, glm::vec3(0.0), glm::vec3(1.0));
+}
+
+glm::vec3 aces_tonemap(glm::vec3 const & x) {
+    return saturate((x * (2.51f * x + 0.03f)) / (x * (2.43f * x + 0.59f) + 0.14f));
+}
+
 uint8_t fix_color(float value) {
     auto gamma_corrected = powf(value, GAMMA);
     auto tmp = std::round(gamma_corrected * 255);
@@ -333,6 +341,7 @@ std::vector<uint8_t> Scene::render() const {
                 curr_color = curr_primitive->get_color(O, D, t, *this);
 
             check_color(*curr_color);
+            curr_color = new glm::vec3(aces_tonemap(*curr_color));
 
             int it = 3 * (p_x + p_y * _dimension_width);
             render[it + 0] = fix_color(curr_color->r);
