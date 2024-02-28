@@ -13,6 +13,8 @@
 
 // TODO: убрать утечки памяти
 
+#define GAMMA (1 / 2.2)
+
 struct Geometry{
     virtual float get_t(glm::vec3 O, glm::vec3 D) = 0;
     virtual glm::vec3* get_normal(glm::vec3 P) = 0;

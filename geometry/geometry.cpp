@@ -27,7 +27,8 @@ float pick_t(float t1, float t2) {
 }
 
 uint8_t fix_color(float value) {
-    auto tmp = std::round(value * 255);
+    auto gamma_corrected = powf(value, GAMMA);
+    auto tmp = std::round(gamma_corrected * 255);
     if (tmp > 255)
         tmp = 255;
     return (int8_t) tmp;
