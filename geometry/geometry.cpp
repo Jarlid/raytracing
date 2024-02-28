@@ -31,7 +31,7 @@ uint8_t fix_color(float value) {
     auto tmp = std::round(gamma_corrected * 255);
     if (tmp > 255)
         tmp = 255;
-    return (int8_t) tmp;
+    return (uint8_t) tmp;
 }
 
 void check_color(const glm::vec3 color) {
