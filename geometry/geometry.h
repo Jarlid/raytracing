@@ -81,7 +81,7 @@ public:
     float get_t(glm::vec3 O, glm::vec3 D);
     glm::vec3* get_normal(glm::vec3 P);
 
-    glm::vec3* get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& scene);
+    glm::vec3* get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& scene, int recursion_depth);
 };
 
 enum class LightSourceType {
@@ -125,11 +125,15 @@ private:
 
     glm::vec3* _ambient_light = new glm::vec3(0);
 
+    int _ray_depth = 1;
+
 public:
     explicit Scene(std::ifstream* in_stream);
 
     std::pair<float, Primitive*> get_t(glm::vec3 O, glm::vec3 D, float eps) const;
-    std::pair<float, Primitive*> get_t(glm::vec3 O, glm::vec3 D) const;
+
+    glm::vec3* get_color(glm::vec3 O, glm::vec3 D, float eps, int recursion_depth) const;
+    glm::vec3* get_color(glm::vec3 O, glm::vec3 D) const;
 
     std::vector<uint8_t> render() const;
 

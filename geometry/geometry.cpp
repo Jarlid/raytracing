@@ -172,7 +172,7 @@ glm::vec3* Primitive::get_normal(glm::vec3 P) {
     return new glm::vec3(glm::normalize(glm::rotate(*_rotation, *_geometry->get_normal(P))));
 }
 
-glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& scene) {
+glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& scene, int recursion_depth) {
     glm::vec3 P = O + t * D;
     glm::vec3 N = *get_normal(P);
     bool inside = false;
@@ -183,7 +183,13 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
     }
 
     if (_material == Material::METALLIC) {
-        return _color; // TODO
+        glm::vec3 new_D = D - 2.f * glm::dot(N, D) * N;
+
+        glm::vec3* color = scene.get_color(P, new_D, EPSILON, recursion_depth + 1);
+        *color *= *_color;
+
+        check_color(*color);
+        return color;
     }
 
     if (_material == Material::DIELECTRIC) {
@@ -298,6 +304,10 @@ Scene::Scene(std::ifstream* in_stream) {
             not_primitive_or_light = true;
             _ambient_light = stream_vec3(in_stream);
         }
+        else if (command == "RAY_DEPTH") {
+            not_primitive_or_light = true;
+            *in_stream >> _ray_depth;
+        }
 
         if (not_primitive_or_light || command == "NEW_PRIMITIVE" || command == "NEW_LIGHT") {
             if (new_primitive) {
@@ -345,8 +355,26 @@ std::pair<float, Primitive*> Scene::get_t(glm::vec3 O, glm::vec3 D, float eps) c
     return {t, curr_primitive};
 }
 
-std::pair<float, Primitive*> Scene::get_t(glm::vec3 O, glm::vec3 D) const {
-    return get_t(O, D, 0);
+glm::vec3* Scene::get_color(glm::vec3 O, glm::vec3 D, float eps, int recursion_depth) const {
+    if (recursion_depth > _ray_depth)
+        return new glm::vec3(0);
+
+    float t;
+    Primitive* curr_primitive;
+    std::tie(t, curr_primitive) = get_t(O, D, eps);
+
+    glm::vec3* curr_color;
+    if (t <= eps || curr_primitive == nullptr)
+        curr_color = _bg_color;
+    else
+        curr_color = curr_primitive->get_color(O, D, t, *this, recursion_depth);
+
+    check_color(*curr_color);
+    return new glm::vec3(*curr_color);
+}
+
+glm::vec3* Scene::get_color(glm::vec3 O, glm::vec3 D) const {
+    return get_color(O, D, 0, 1);
 }
 
 std::vector<uint8_t> Scene::render() const {
@@ -364,17 +392,7 @@ std::vector<uint8_t> Scene::render() const {
             glm::vec3 D = glm::normalize(c_x * *_camera_right + c_y * *_camera_up + c_z * *_camera_forward);
             glm::vec3 O = *_camera_position;
 
-            float t;
-            Primitive* curr_primitive;
-            std::tie(t, curr_primitive) = get_t(O, D);
-
-            glm::vec3* curr_color;
-            if (t <= 0 || curr_primitive == nullptr)
-                curr_color = _bg_color;
-            else
-                curr_color = curr_primitive->get_color(O, D, t, *this);
-
-            check_color(*curr_color);
+            glm::vec3* curr_color = get_color(O, D);
             curr_color = new glm::vec3(aces_tonemap(*curr_color));
 
             int it = 3 * (p_x + p_y * _dimension_width);
