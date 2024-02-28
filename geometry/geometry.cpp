@@ -34,6 +34,11 @@ uint8_t fix_color(float value) {
     return (int8_t) tmp;
 }
 
+void check_color(const glm::vec3 color) {
+    if (color.r < 0 or color.g < 0 or color.b < 0)
+        exit(1);
+}
+
 Plane::Plane(std::istream* in_stream) {
     _n = stream_vec3(in_stream);
 }
@@ -174,6 +179,8 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
     for (auto light_source: scene.light_sources())
         *total_light += *light_source->diffused_light(P, N);
     *total_light *= *_color;
+
+    check_color(*total_light);
     return total_light;
 }
 
@@ -324,6 +331,8 @@ std::vector<uint8_t> Scene::render() const {
                 curr_color = _bg_color;
             else
                 curr_color = curr_primitive->get_color(O, D, t, *this);
+
+            check_color(*curr_color);
 
             int it = 3 * (p_x + p_y * _dimension_width);
             render[it + 0] = fix_color(curr_color->r);
