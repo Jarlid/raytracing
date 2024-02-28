@@ -214,10 +214,13 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
         glm::vec3* refracted_color =
                 scene.get_color(P + refracted_D * EPSILON, refracted_D, recursion_depth + 1);
 
+        if (not inside)
+            *refracted_color *= *_color;
+
         float R0 = powf((n1 - n2) / (n1 + n2), 2);
         float R = R0 + (1 - R0) * powf(1 - cos_t1, 5);
 
-        auto final_color = new glm::vec3(R * *reflected_color + (1 - R) * *refracted_color * *_color);
+        auto final_color = new glm::vec3(R * *reflected_color + (1 - R) * *refracted_color);
 
         check_color(*final_color);
         return final_color;
