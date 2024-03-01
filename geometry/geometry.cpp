@@ -227,74 +227,14 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
     }
 
     // if (_material == Material::DIFFUSER)
-    auto total_light = new glm::vec3(*scene.ambient_light());
-    for (auto light_source: scene.light_sources()) {
-        glm::vec3* light_direction;
-        float R;
-        std::tie(light_direction, R) = light_source->light_direction(P);
-
-        t = scene.get_t(P + *light_direction * EPSILON, *light_direction).first;
-        if (t < 0 or t * glm::length(*light_direction) > R)
-            *total_light += *light_source->diffused_light(P, N);
-    }
-
-    *total_light *= *_color;
-
-    check_color(*total_light);
-    return total_light;
-}
-
-LightSource::LightSource(std::istream *in_stream) {
-    std::string command;
-
-    while (*in_stream >> command) {
-        std::transform(command.begin(), command.end(), command.begin(), ::toupper);
-
-        if (command == "LIGHT_INTENSITY")
-            _light_intensity = stream_vec3(in_stream);
-        else if (command == "LIGHT_DIRECTION") {
-            _light_source_type = LightSourceType::DIRECTIONAL;
-            _light_direction = stream_vec3(in_stream);
-        }
-        else if (command == "LIGHT_POSITION") {
-            _light_source_type = LightSourceType::POINT;
-            _light_position = stream_vec3(in_stream);
-        }
-        else if (command == "LIGHT_ATTENUATION") {
-            _light_source_type = LightSourceType::POINT;
-            *in_stream >> c0 >> c1 >> c2;
-        }
-    }
-}
-
-std::pair<glm::vec3*, float> LightSource::light_direction(glm::vec3 P) {
-    if (_light_source_type == LightSourceType::DIRECTIONAL)
-        return {_light_direction, std::numeric_limits<float>::infinity()};
-    auto light_direction = new glm::vec3(*_light_position - P);
-    return {light_direction, glm::length(*light_direction)};
-}
-
-glm::vec3 *LightSource::diffused_light(glm::vec3 P, glm::vec3 N) {
-    glm::vec3* light_direction_now;
-    float R;
-    std::tie(light_direction_now, R) = light_direction(P);
-
-    glm::vec3 light_intensity = _light_source_type == LightSourceType::POINT ?
-                                *_light_intensity / (c0 + c1 * R + c2 * R * R) : *_light_intensity;
-
-    float cos = glm::dot(glm::normalize(*light_direction_now), glm::normalize(N));
-    if (cos < 0)
-        return new glm::vec3(0);
-    return new glm::vec3(cos * light_intensity);
+    return _color; // TODO
 }
 
 Scene::Scene(std::ifstream* in_stream) {
     std::string command;
     std::stringstream* primitive_stream;
-    std::stringstream* light_stream;
 
     bool new_primitive = false;
-    bool new_light = false;
 
     while (*in_stream >> command) {
         std::transform(command.begin(), command.end(), command.begin(), ::toupper);
@@ -330,23 +270,15 @@ Scene::Scene(std::ifstream* in_stream) {
             not_primitive_or_light = true;
             *in_stream >> _camera_fov_x;
         }
-        else if (command == "AMBIENT_LIGHT") {
-            not_primitive_or_light = true;
-            _ambient_light = stream_vec3(in_stream);
-        }
         else if (command == "RAY_DEPTH") {
             not_primitive_or_light = true;
             *in_stream >> _ray_depth;
         }
 
-        if (not_primitive_or_light || command == "NEW_PRIMITIVE" || command == "NEW_LIGHT") {
+        if (not_primitive_or_light || command == "NEW_PRIMITIVE") {
             if (new_primitive) {
                 new_primitive = false;
                 _primitives.push_back(new Primitive(primitive_stream));
-            }
-            if (new_light) {
-                new_light = false;
-                _light_sources.push_back(new LightSource(light_stream));
             }
         }
         if (not_primitive_or_light)
@@ -356,14 +288,8 @@ Scene::Scene(std::ifstream* in_stream) {
             new_primitive = true;
             primitive_stream = new std::stringstream();
         }
-        else if (command == "NEW_LIGHT") {
-            new_light = true;
-            light_stream = new std::stringstream();
-        }
         else if (new_primitive)
             *primitive_stream << command << " ";
-        else if (new_light)
-            *light_stream << command << " ";
     }
 
     if (new_primitive)
@@ -435,14 +361,6 @@ std::vector<uint8_t> Scene::render() const {
     }
 
     return render;
-}
-
-std::vector<LightSource*> Scene::light_sources() const {
-    return _light_sources;
-}
-
-glm::vec3 *Scene::ambient_light() const {
-    return _ambient_light;
 }
 
 int Scene::width() const {
