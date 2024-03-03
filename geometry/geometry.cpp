@@ -201,12 +201,20 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
 
         float sin_t2 = sin_t1 * n1 / n2;
 
-        glm::vec3 reflected_D = D - 2.f * glm::dot(N, D) * N;
-        glm::vec3* reflected_color =
-                scene.get_color(P + reflected_D * EPSILON, reflected_D, recursion_depth + 1);
+        float R0 = powf((n1 - n2) / (n1 + n2), 2);
+        float R = R0 + (1 - R0) * powf(1 - cos_t1, 5);
 
-        if (sin_t2 > 1)
+        std::uniform_real_distribution<float> distribution(0, 1);
+        float U = distribution(*scene.random_engine());
+
+        if (sin_t2 > 1 or U < R) {
+            glm::vec3 reflected_D = D - 2.f * glm::dot(N, D) * N;
+            glm::vec3* reflected_color =
+                    scene.get_color(P + reflected_D * EPSILON, reflected_D, recursion_depth + 1);
+
+            check_color(*reflected_color);
             return reflected_color;
+        }
 
         float cos_t2 = sqrtf(1 - sin_t2 * sin_t2);
 
@@ -217,13 +225,8 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
         if (not inside)
             *refracted_color *= *_color;
 
-        float R0 = powf((n1 - n2) / (n1 + n2), 2);
-        float R = R0 + (1 - R0) * powf(1 - cos_t1, 5);
-
-        auto final_color = new glm::vec3(R * *reflected_color + (1 - R) * *refracted_color);
-
-        check_color(*final_color);
-        return final_color;
+        check_color(*refracted_color);
+        return refracted_color;
     }
 
     // if (_material == Material::DIFFUSER)
@@ -369,4 +372,8 @@ int Scene::width() const {
 
 int Scene::height() const {
     return _dimension_height;
+}
+
+std::default_random_engine* Scene::random_engine() const {
+    return _random_engine;
 }

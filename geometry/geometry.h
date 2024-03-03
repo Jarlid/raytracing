@@ -2,6 +2,7 @@
 
 #include <istream>
 #include <vector>
+#include <random>
 
 #define GLM_ENABLE_EXPERIMENTAL
 
@@ -102,6 +103,8 @@ private:
 
     int _ray_depth = 1;
 
+    std::default_random_engine* _random_engine = new std::default_random_engine();
+
 public:
     explicit Scene(std::ifstream* in_stream);
 
@@ -114,4 +117,6 @@ public:
 
     int width() const;
     int height() const;
+
+    std::default_random_engine* random_engine() const;
 };
