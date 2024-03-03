@@ -43,9 +43,9 @@ uint8_t fix_color(float value) {
     return (uint8_t) tmp;
 }
 
-void check_color(const glm::vec3 color) {
+void check_color(const glm::vec3 color, const int error_code) {
     if (color.r < 0 or color.g < 0 or color.b < 0)
-        exit(1);
+        exit(error_code);
 }
 
 Plane::Plane(std::istream* in_stream) {
@@ -148,6 +148,8 @@ Primitive::Primitive(std::istream* in_stream) {
             _material = Material::DIELECTRIC;
         else if (command == "IOR")
             *in_stream >> _ior;
+        else if (command == "EMISSION")
+            _emission = stream_vec3(in_stream);
     }
 }
 
@@ -182,13 +184,14 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
     }
 
     if (_material == Material::METALLIC) {
-        glm::vec3 new_D = D - 2.f * glm::dot(N, D) * N;
+        glm::vec3 new_D = glm::normalize(D - 2.f * glm::dot(N, D) * N);
 
-        glm::vec3* color = scene.get_color(P + new_D * EPSILON, new_D, recursion_depth + 1);
-        *color *= *_color;
+        glm::vec3 reflected_color = *_emission +
+                *scene.get_color(P + new_D * EPSILON, new_D, recursion_depth + 1);
+        reflected_color *= *_color;
 
-        check_color(*color);
-        return color;
+        check_color(reflected_color, 348765);
+        return new glm::vec3(reflected_color);
     }
 
     if (_material == Material::DIELECTRIC) {
@@ -208,29 +211,45 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
         float U = distribution(*scene.random_engine());
 
         if (sin_t2 > 1 or U < R) {
-            glm::vec3 reflected_D = D - 2.f * glm::dot(N, D) * N;
-            glm::vec3* reflected_color =
-                    scene.get_color(P + reflected_D * EPSILON, reflected_D, recursion_depth + 1);
+            glm::vec3 reflected_D = glm::normalize(D - 2.f * glm::dot(N, D) * N);
+            glm::vec3 reflected_color = *_emission +
+                    *scene.get_color(P + reflected_D * EPSILON, reflected_D, recursion_depth + 1);
 
-            check_color(*reflected_color);
-            return reflected_color;
+            check_color(reflected_color, 397234);
+            return new glm::vec3(reflected_color);
         }
 
         float cos_t2 = sqrtf(1 - sin_t2 * sin_t2);
 
-        glm::vec3 refracted_D = D * n1 / n2 + N * (cos_t1 * n1 / n2 - cos_t2);
-        glm::vec3* refracted_color =
-                scene.get_color(P + refracted_D * EPSILON, refracted_D, recursion_depth + 1);
+        glm::vec3 refracted_D = glm::normalize(D * n1 / n2 + N * (cos_t1 * n1 / n2 - cos_t2));
+        glm::vec3 refracted_color = *_emission +
+                *scene.get_color(P + refracted_D * EPSILON, refracted_D, recursion_depth + 1);
 
         if (not inside)
-            *refracted_color *= *_color;
+            refracted_color *= *_color;
 
-        check_color(*refracted_color);
-        return refracted_color;
+        check_color(refracted_color, 387463);
+        return new glm::vec3(refracted_color);
     }
 
     // if (_material == Material::DIFFUSER)
-    return _color; // TODO
+    float x, y, z;
+    std::uniform_real_distribution<float> distribution(-1, 1);
+    do {
+        x = distribution(*scene.random_engine());
+        y = distribution(*scene.random_engine());
+        z = distribution(*scene.random_engine());
+    } while (x * x + y * y + z * z > 1 or x == 0 and y == 0 and z == 0);
+
+    glm::vec3 new_D = glm::normalize(glm::vec3(x, y, z));
+    if (glm::dot(new_D, N) < 0)
+        new_D = -new_D;
+
+    glm::vec3* L_in = scene.get_color(P + new_D * EPSILON, new_D, recursion_depth + 1);
+    glm::vec3 color = *_emission + 2.f * *_color * *L_in * glm::dot(new_D, N);
+
+    check_color(color, 873464);
+    return new glm::vec3(color);
 }
 
 Scene::Scene(std::ifstream* in_stream) {
@@ -334,7 +353,7 @@ glm::vec3* Scene::get_color(glm::vec3 O, glm::vec3 D, int recursion_depth) const
     else
         curr_color = curr_primitive->get_color(O, D, t, *this, recursion_depth);
 
-    check_color(*curr_color);
+    check_color(*curr_color, 937433);
     return new glm::vec3(*curr_color);
 }
 
@@ -369,7 +388,7 @@ std::vector<uint8_t> Scene::render() const {
             }
 
             *color_sum /= _sample_num;
-            check_color(*color_sum);
+            check_color(*color_sum, 384763);
 
             color_sum = new glm::vec3(aces_tonemap(*color_sum));
 
