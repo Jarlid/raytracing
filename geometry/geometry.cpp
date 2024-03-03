@@ -277,6 +277,10 @@ Scene::Scene(std::ifstream* in_stream) {
             not_primitive_or_light = true;
             *in_stream >> _ray_depth;
         }
+        else if (command == "SAMPLES") {
+            not_primitive_or_light = true;
+            *in_stream >> _sample_num;
+        }
 
         if (not_primitive_or_light || command == "NEW_PRIMITIVE") {
             if (new_primitive) {
@@ -344,22 +348,35 @@ std::vector<uint8_t> Scene::render() const {
     float tan_half_fov_x = tanf(_camera_fov_x / 2);
     float tan_half_fov_y = tan_half_fov_x / (float) _dimension_width * (float) _dimension_height;
 
+    std::uniform_real_distribution<float> distribution(0, 1);
+
     for (int p_x = 0; p_x < _dimension_width; ++p_x) {
         for (int p_y = 0; p_y < _dimension_height; ++p_y) {
-            float c_x = (2 * ((float) p_x + 0.5f) / (float) _dimension_width - 1) * tan_half_fov_x;
-            float c_y = -1 * (2 * ((float) p_y + 0.5f) / (float) _dimension_height - 1) * tan_half_fov_y;
-            float c_z = 1;
+            auto color_sum = new glm::vec3(0);
 
-            glm::vec3 D = glm::normalize(c_x * *_camera_right + c_y * *_camera_up + c_z * *_camera_forward);
-            glm::vec3 O = *_camera_position;
+            for (int curr_sample = 0; curr_sample < _sample_num; ++curr_sample) {
+                float u_x = distribution(*_random_engine);
+                float u_y = distribution(*_random_engine);
 
-            glm::vec3* curr_color = get_color(O, D);
-            curr_color = new glm::vec3(aces_tonemap(*curr_color));
+                float c_x = (2 * ((float) p_x + u_x) / (float) _dimension_width - 1) * tan_half_fov_x;
+                float c_y = -1 * (2 * ((float) p_y + u_y) / (float) _dimension_height - 1) * tan_half_fov_y;
+                float c_z = 1;
+
+                glm::vec3 D = glm::normalize(c_x * *_camera_right + c_y * *_camera_up + c_z * *_camera_forward);
+                glm::vec3 O = *_camera_position;
+
+                *color_sum += *get_color(O, D);
+            }
+
+            *color_sum /= _sample_num;
+            check_color(*color_sum);
+
+            color_sum = new glm::vec3(aces_tonemap(*color_sum));
 
             int it = 3 * (p_x + p_y * _dimension_width);
-            render[it + 0] = fix_color(curr_color->r);
-            render[it + 1] = fix_color(curr_color->g);
-            render[it + 2] = fix_color(curr_color->b);
+            render[it + 0] = fix_color(color_sum->r);
+            render[it + 1] = fix_color(color_sum->g);
+            render[it + 2] = fix_color(color_sum->b);
         }
     }
 

@@ -103,6 +103,8 @@ private:
 
     int _ray_depth = 1;
 
+    int _sample_num = 1;
+
     std::default_random_engine* _random_engine = new std::default_random_engine();
 
 public:
