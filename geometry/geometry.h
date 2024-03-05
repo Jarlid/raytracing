@@ -2,12 +2,13 @@
 
 #include <istream>
 #include <vector>
-#include <random>
 
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
+
+#include "distributions/distributions.h"
 
 //#include "../glm/glm/vec3.hpp"
 //#include "../glm/glm/gtx/quaternion.hpp"
@@ -107,7 +108,7 @@ private:
 
     int _sample_num = 1;
 
-    std::default_random_engine* _random_engine = new std::default_random_engine();
+    RandomEngine* _random_engine = new RandomEngine();
 
 public:
     explicit Scene(std::ifstream* in_stream);
@@ -122,5 +123,5 @@ public:
     int width() const;
     int height() const;
 
-    std::default_random_engine* random_engine() const;
+    RandomEngine* random_engine() const;
 };

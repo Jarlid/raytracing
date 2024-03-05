@@ -5,6 +5,7 @@
 #include <sstream>
 #include <algorithm>
 #include <tuple>
+#include <random>
 
 glm::vec3* stream_vec3(std::istream* in_stream) {
     float x, y, z = 0;
@@ -233,20 +234,12 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
     }
 
     // if (_material == Material::DIFFUSER)
-    float x, y, z;
-    std::uniform_real_distribution<float> distribution(-1, 1);
-    do {
-        x = distribution(*scene.random_engine());
-        y = distribution(*scene.random_engine());
-        z = distribution(*scene.random_engine());
-    } while (x * x + y * y + z * z > 1 or x == 0 and y == 0 and z == 0);
-
-    glm::vec3 new_D = glm::normalize(glm::vec3(x, y, z));
-    if (glm::dot(new_D, N) < 0)
-        new_D = -new_D;
+    auto distribution = UniformHemisphere();
+    glm::vec3 new_D = *distribution.sample(P, N, *scene.random_engine());
+    float pdf = distribution.pdf(P, N, new_D);
 
     glm::vec3* L_in = scene.get_color(P + new_D * EPSILON, new_D, recursion_depth + 1);
-    glm::vec3 color = *_emission + 2.f * *_color * *L_in * glm::dot(new_D, N);
+    glm::vec3 color = *_emission + *_color * *L_in * glm::dot(new_D, N) / (float) M_PI / pdf;
 
     check_color(color, 873464);
     return new glm::vec3(color);
