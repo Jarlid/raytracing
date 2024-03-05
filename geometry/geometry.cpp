@@ -234,7 +234,7 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
     }
 
     // if (_material == Material::DIFFUSER)
-    auto distribution = UniformHemisphere();
+    auto distribution = CosineHemisphere();
     glm::vec3 new_D = *distribution.sample(P, N, *scene.random_engine());
     float pdf = distribution.pdf(P, N, new_D);
 
