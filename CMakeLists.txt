@@ -9,8 +9,10 @@ add_executable(Raytracing
         main.cpp
         geometry/geometry.cpp
         geometry/geometry.h
+        geometry/scene.h
         distributions/distributions.cpp
-        distributions/distributions.h)
+        distributions/distributions.h
+        distributions/engine.h)
 
 target_include_directories(Raytracing PUBLIC "${CMAKE_CURRENT_LIST_DIR}")
 

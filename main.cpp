@@ -1,7 +1,7 @@
 #include <iostream>
 #include <fstream>
 
-#include "geometry/geometry.h"
+#include "geometry/scene.h"
 
 int main(int argc, char* argv[]) {
     if (argc != 3)

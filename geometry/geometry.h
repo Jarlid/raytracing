@@ -2,26 +2,39 @@
 
 #include <istream>
 #include <vector>
+#include <tuple>
+#include <random>
 
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
 
-#include "distributions/distributions.h"
-
-//#include "../glm/glm/vec3.hpp"
-//#include "../glm/glm/gtx/quaternion.hpp"
+#include "distributions/engine.h"
 
 // TODO: убрать утечки памяти
 
 #define GAMMA (1 / 2.2)
 #define EPSILON 0.0001f
+#define F_INF std::numeric_limits<float>::infinity()
 
-struct Geometry{
-    virtual float get_t(glm::vec3 O, glm::vec3 D) = 0;
+struct Geometry {
+private:
+    std::uniform_real_distribution<float>* _forbidden_base_distribution = nullptr;
+
+protected:
+    float base_distribution(RandomEngine& random_engine, bool including_negative);
+
+public:
+    virtual bool is_plane();
+
+    virtual std::pair<float, float> get_ts(glm::vec3 O, glm::vec3 D) = 0; // Формула: P = O + t * D
+    // It's so hard to not joke about TS...
+    // But either way, I'm gonna go preorder TTPD.
     virtual glm::vec3* get_normal(glm::vec3 P) = 0;
-    // Формула: P = O + t * D
+
+    virtual glm::vec3* get_random_point(RandomEngine& random_engine) = 0;
+    virtual float get_point_pdf(glm::vec3 P) = 0;
 };
 
 struct Plane: Geometry {
@@ -31,8 +44,13 @@ private:
 public:
     explicit Plane(std::istream* in_stream);
 
-    float get_t(glm::vec3 O, glm::vec3 D) override;
+    bool is_plane() override;
+
+    std::pair<float, float> get_ts(glm::vec3 O, glm::vec3 D) override;
     glm::vec3* get_normal(glm::vec3 P) override;
+
+    glm::vec3* get_random_point(RandomEngine& random_engine) override;
+    float get_point_pdf(glm::vec3 P) override;
 };
 
 struct Ellipsoid: Geometry {
@@ -42,8 +60,11 @@ private:
 public:
     explicit Ellipsoid(std::istream* in_stream);
 
-    float get_t(glm::vec3 O, glm::vec3 D) override;
+    std::pair<float, float> get_ts(glm::vec3 O, glm::vec3 D) override;
     glm::vec3* get_normal(glm::vec3 P) override;
+
+    glm::vec3* get_random_point(RandomEngine& random_engine) override;
+    float get_point_pdf(glm::vec3 P) override;
 };
 
 struct Box: Geometry {
@@ -53,8 +74,11 @@ private:
 public:
     explicit Box(std::istream* in_stream);
 
-    float get_t(glm::vec3 O, glm::vec3 D) override;
+    std::pair<float, float> get_ts(glm::vec3 O, glm::vec3 D) override;
     glm::vec3* get_normal(glm::vec3 P) override;
+
+    glm::vec3* get_random_point(RandomEngine& random_engine) override;
+    float get_point_pdf(glm::vec3 P) override;
 };
 
 enum class Material {
@@ -82,46 +106,15 @@ private:
 public:
     explicit Primitive(std::istream* in_stream);
 
+    bool is_plane();
+    bool has_emission();
+
+    std::pair<float, float> get_ts(glm::vec3 O, glm::vec3 D);
     float get_t(glm::vec3 O, glm::vec3 D);
     glm::vec3* get_normal(glm::vec3 P);
 
     glm::vec3* get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& scene, int recursion_depth);
-};
 
-class Scene {
-private:
-    int _dimension_width = 0, _dimension_height = 0;
-
-    glm::vec3* _bg_color;
-
-    glm::vec3* _camera_position;
-
-    glm::vec3* _camera_right;
-    glm::vec3* _camera_up;
-    glm::vec3* _camera_forward;
-
-    float _camera_fov_x = 0;
-
-    std::vector<Primitive*> _primitives;
-
-    int _ray_depth = 1;
-
-    int _sample_num = 1;
-
-    RandomEngine* _random_engine = new RandomEngine();
-
-public:
-    explicit Scene(std::ifstream* in_stream);
-
-    std::pair<float, Primitive*> get_t(glm::vec3 O, glm::vec3 D) const;
-
-    glm::vec3* get_color(glm::vec3 O, glm::vec3 D, int recursion_depth) const;
-    glm::vec3* get_color(glm::vec3 O, glm::vec3 D) const;
-
-    std::vector<uint8_t> render() const;
-
-    int width() const;
-    int height() const;
-
-    RandomEngine* random_engine() const;
+    glm::vec3* get_random_point(RandomEngine& random_engine);
+    float get_point_pdf(glm::vec3 P);
 };

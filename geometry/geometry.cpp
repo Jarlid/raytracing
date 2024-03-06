@@ -1,11 +1,11 @@
 #include "geometry.h"
+#include "scene.h"
 
 #include <cmath>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
 #include <tuple>
-#include <random>
 
 glm::vec3* stream_vec3(std::istream* in_stream) {
     float x, y, z = 0;
@@ -49,46 +49,89 @@ void check_color(const glm::vec3 color, const int error_code) {
         exit(error_code);
 }
 
+float Geometry::base_distribution(RandomEngine& random_engine, bool including_negative) {
+    if (_forbidden_base_distribution == nullptr)
+        _forbidden_base_distribution = new std::uniform_real_distribution<float>(-1, 1);
+    if (including_negative)
+        return (*_forbidden_base_distribution)(random_engine);
+    return abs((*_forbidden_base_distribution)(random_engine));
+}
+
+bool Geometry::is_plane() {
+    return false;
+}
+
 Plane::Plane(std::istream* in_stream) {
     _n = stream_vec3(in_stream);
 }
 
-float Plane::get_t(glm::vec3 O, glm::vec3 D) {
-    return -1 * glm::dot(O, *_n) / glm::dot(D, *_n);
+bool Plane::is_plane() {
+    return true;
+}
+
+std::pair<float, float> Plane::get_ts(glm::vec3 O, glm::vec3 D) {
+    return {-F_INF, -1 * glm::dot(O, *_n) / glm::dot(D, *_n)};
 }
 
 glm::vec3* Plane::get_normal(glm::vec3 P) {
     return new glm::vec3(glm::normalize(*_n));
 }
 
+glm::vec3 *Plane::get_random_point(RandomEngine& random_engine) {
+    exit(498723);
+}
+
+float Plane::get_point_pdf(glm::vec3 P) {
+    exit(498724);
+}
+
 Ellipsoid::Ellipsoid(std::istream* in_stream) {
     _r = stream_vec3(in_stream);
 }
 
-float Ellipsoid::get_t(glm::vec3 O, glm::vec3 D) {
+std::pair<float, float> Ellipsoid::get_ts(glm::vec3 O, glm::vec3 D) {
     float a = glm::dot(D / *_r, D / *_r);
     float b = 2 * glm::dot(O / *_r, D / *_r);
     float c = glm::dot(O / *_r, O / *_r) - 1;
     float d = b * b - 4 * a * c;
 
     if (d < 0)
-        return -1;
+        return {-F_INF, -F_INF};
     if (d == 0)
-        return -0.5f * b / a;
+        return {-F_INF, -0.5f * b / a};
 
     float t1 = (-1 * b + sqrtf(d)) / (2 * a), t2 = (-1 * b - sqrtf(d)) / (2 * a);
-    return pick_t(t1, t2);
+    if (t1 < t2)
+        return {t1, t2};
+    return {t2, t1};
 }
 
 glm::vec3* Ellipsoid::get_normal(glm::vec3 P) {
     return new glm::vec3(glm::normalize(P / *_r / *_r));
 }
 
+glm::vec3* Ellipsoid::get_random_point(RandomEngine &random_engine) {
+    float x, y, z;
+    do {
+        x = base_distribution(random_engine, true);
+        y = base_distribution(random_engine, true);
+        z = base_distribution(random_engine, true);
+    } while (x * x + y * y + z * z > 1 or x == 0 and y == 0 and z == 0);
+
+    return new glm::vec3(glm::normalize(glm::vec3(x, y, z)) * *_r);
+}
+
+float Ellipsoid::get_point_pdf(glm::vec3 P) {
+    glm::vec3 N = *get_normal(P);
+    glm::vec3 R2 = *_r * *_r;
+    return 0.25f / (float) M_PI / sqrtf(N.x * N.x * R2.y * R2.z + R2.x * N.y * N.y * R2.z + R2.x * R2.y * N.z * N.z);
+}
+
 Box::Box(std::istream* in_stream) {
     _s = stream_vec3(in_stream);
 }
 
-float Box::get_t(glm::vec3 O, glm::vec3 D) {
+std::pair<float, float> Box::get_ts(glm::vec3 O, glm::vec3 D) {
     glm::vec3 T1 = (*_s - O) / D, T2 = (- *_s - O) / D;
 
     float tx1 = fminf(T1.x, T2.x), tx2 = fmaxf(T1.x, T2.x);
@@ -99,9 +142,8 @@ float Box::get_t(glm::vec3 O, glm::vec3 D) {
     float t2 = fminf(tx2, fminf(ty2, tz2));
 
     if (t1 > t2)
-        return -1;
-
-    return pick_t(t1, t2);
+        return {-F_INF, -F_INF};
+    return {t1, t2};
 }
 
 glm::vec3* Box::get_normal(glm::vec3 P) {
@@ -123,6 +165,26 @@ glm::vec3* Box::get_normal(glm::vec3 P) {
     if (nP.z > 0)
         return new glm::vec3(0, 0, 1);
     return new glm::vec3(0, 0, -1);
+}
+
+glm::vec3* Box::get_random_point(RandomEngine& random_engine) {
+    float Wx = _s->y * _s->z, Wy = _s->x * _s->z, Wz = _s->y * _s->z;
+    float U = base_distribution(random_engine, false) * (Wx + Wy + Wz);
+
+    float U1 = base_distribution(random_engine, true);
+    float U2 = base_distribution(random_engine, true);
+    float coin = base_distribution(random_engine, true) < 0 ? -1 : 1;
+
+    if (U < Wx)
+        return new glm::vec3(coin * _s->x, U1 * _s->y, U2 * _s->z);
+    if (U < Wx + Wy)
+        return new glm::vec3(U1 * _s->x, coin * _s->y, U2 * _s->z);
+    return new glm::vec3(U1 * _s->x, U2 * _s->y, coin * _s->z);
+
+}
+
+float Box::get_point_pdf(glm::vec3 P) {
+    return 0.5f / (2 * _s->y * 2 * _s->z + 2 * _s->x * 2 * _s->z * 2 * _s->y * 2 * _s->z);
 }
 
 Primitive::Primitive(std::istream* in_stream) {
@@ -154,7 +216,15 @@ Primitive::Primitive(std::istream* in_stream) {
     }
 }
 
-float Primitive::get_t(glm::vec3 O, glm::vec3 D) {
+bool Primitive::is_plane() {
+    return _geometry->is_plane();
+}
+
+bool Primitive::has_emission() {
+    return glm::length(*_emission) > 0;
+}
+
+std::pair<float, float> Primitive::get_ts(glm::vec3 O, glm::vec3 D) {
     O -= *_position;
 
     glm::quat reverse_rotation = glm::conjugate(*_rotation);
@@ -162,7 +232,13 @@ float Primitive::get_t(glm::vec3 O, glm::vec3 D) {
     O = glm::rotate(reverse_rotation, O);
     D = glm::rotate(reverse_rotation, D);
 
-    return _geometry->get_t(O, D);
+    return _geometry->get_ts(O, D);
+}
+
+float Primitive::get_t(glm::vec3 O, glm::vec3 D) {
+    float t1, t2;
+    std::tie(t1, t2) = get_ts(O, D);
+    return pick_t(t1, t2);
 }
 
 glm::vec3* Primitive::get_normal(glm::vec3 P) {
@@ -234,15 +310,46 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
     }
 
     // if (_material == Material::DIFFUSER)
-    auto distribution = CosineHemisphere();
+    auto distribution = *scene.distributions()[0];
     glm::vec3 new_D = *distribution.sample(P, N, *scene.random_engine());
-    float pdf = distribution.pdf(P, N, new_D);
 
     glm::vec3* L_in = scene.get_color(P + new_D * EPSILON, new_D, recursion_depth + 1);
-    glm::vec3 color = *_emission + *_color * *L_in * glm::dot(new_D, N) / (float) M_PI / pdf;
+
+    float pdf = distribution.pdf(P, N, new_D);
+
+    glm::vec3 color;
+    if (pdf == 0 || _isnanf(pdf) || std::isinf(pdf))
+        color = *_emission;
+    else
+        color = *_emission + *_color * *L_in * fmaxf(0, glm::dot(new_D, N)) / (float) M_PI / pdf;
+
+    if (_isnanf(color.x))
+        color.x = 0;
+    if (_isnanf(color.y))
+        color.y = 0;
+    if (_isnanf(color.z))
+        color.z = 0;
 
     check_color(color, 873464);
     return new glm::vec3(color);
+}
+
+glm::vec3 *Primitive::get_random_point(RandomEngine& random_engine) {
+    glm::vec3 P = *_geometry->get_random_point(random_engine);
+
+    P = glm::rotate(*_rotation, P);
+    P += *_position;
+
+    return new glm::vec3(P);
+}
+
+float Primitive::get_point_pdf(glm::vec3 P) {
+    glm::quat reverse_rotation = glm::conjugate(*_rotation);
+
+    P -= *_position;
+    P = glm::rotate(reverse_rotation, P);
+
+    return _geometry->get_point_pdf(P);
 }
 
 Scene::Scene(std::ifstream* in_stream) {
@@ -297,7 +404,13 @@ Scene::Scene(std::ifstream* in_stream) {
         if (not_primitive_or_light || command == "NEW_PRIMITIVE") {
             if (new_primitive) {
                 new_primitive = false;
-                _primitives.push_back(new Primitive(primitive_stream));
+
+                auto primitive = new Primitive(primitive_stream);
+
+                if (not primitive->is_plane() and primitive->has_emission())
+                    _distributions.push_back(new LightSource(primitive));
+
+                _primitives.push_back(primitive);
             }
         }
         if (not_primitive_or_light)
@@ -311,8 +424,14 @@ Scene::Scene(std::ifstream* in_stream) {
             *primitive_stream << command << " ";
     }
 
-    if (new_primitive)
-        _primitives.push_back(new Primitive(primitive_stream));
+    if (new_primitive) {
+        auto primitive = new Primitive(primitive_stream);
+
+        if (not primitive->is_plane() and primitive->has_emission())
+            _distributions.push_back(new LightSource(primitive));
+
+        _primitives.push_back(primitive);
+    }
 }
 
 std::pair<float, Primitive*> Scene::get_t(glm::vec3 O, glm::vec3 D) const {
@@ -405,4 +524,8 @@ int Scene::height() const {
 
 std::default_random_engine* Scene::random_engine() const {
     return _random_engine;
+}
+
+std::vector<LightSource*> Scene::distributions() const {
+    return _distributions;
 }
