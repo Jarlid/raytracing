@@ -358,6 +358,8 @@ Scene::Scene(std::ifstream* in_stream) {
 
     bool new_primitive = false;
 
+    std::vector<Distribution*> light_sources;
+
     while (*in_stream >> command) {
         std::transform(command.begin(), command.end(), command.begin(), ::toupper);
 
@@ -408,7 +410,7 @@ Scene::Scene(std::ifstream* in_stream) {
                 auto primitive = new Primitive(primitive_stream);
 
                 if (not primitive->is_plane() and primitive->has_emission())
-                    _light_sources.push_back(new LightSource(primitive));
+                    light_sources.push_back(new LightSource(primitive));
 
                 _primitives.push_back(primitive);
             }
@@ -428,15 +430,17 @@ Scene::Scene(std::ifstream* in_stream) {
         auto primitive = new Primitive(primitive_stream);
 
         if (not primitive->is_plane() and primitive->has_emission())
-            _light_sources.push_back(new LightSource(primitive));
+            light_sources.push_back(new LightSource(primitive));
 
         _primitives.push_back(primitive);
     }
 
-    if (!_light_sources.empty())
-        _distribution = _light_sources[0];
-    else
+    if (light_sources.empty())
         _distribution = new CosineHemisphere();
+    else if (light_sources.size() == 1)
+        _distribution = new Mix({new CosineHemisphere(), light_sources[0]});
+    else
+        _distribution = new Mix({new CosineHemisphere(), new Mix(light_sources)});
 }
 
 std::pair<float, Primitive*> Scene::get_t(glm::vec3 O, glm::vec3 D) const {

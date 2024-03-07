@@ -40,3 +40,15 @@ public:
     glm::vec3 sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) override;
     float pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) override;
 };
+
+struct Mix: Distribution {
+private:
+    std::vector<Distribution*> _inner_distributions;
+    std::uniform_real_distribution<float> _base_distribution = std::uniform_real_distribution<float>(0, 1);
+
+public:
+    explicit Mix(std::vector<Distribution*> distributions);
+
+    glm::vec3 sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) override;
+    float pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) override;
+};

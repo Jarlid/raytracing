@@ -23,7 +23,6 @@ private:
     int _sample_num = 1;
 
     RandomEngine* _random_engine = new RandomEngine();
-    std::vector<LightSource*> _light_sources;
 
     Distribution* _distribution;
 

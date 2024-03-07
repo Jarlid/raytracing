@@ -67,3 +67,21 @@ float LightSource::pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) {
 
     return pdf;
 }
+
+Mix::Mix(std::vector<Distribution*> distributions) {
+    _inner_distributions = std::move(distributions);
+}
+
+glm::vec3 Mix::sample(glm::vec3 P, glm::vec3 N, RandomEngine &random_engine) {
+    int i = (int) (_base_distribution(random_engine) * (float) _inner_distributions.size());
+    return _inner_distributions[i]->sample(P, N, random_engine);
+}
+
+float Mix::pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) {
+    float pdf = 0;
+
+    for (auto & _inner_distribution : _inner_distributions)
+        pdf += _inner_distribution->pdf(P, N, D);
+
+    return pdf / (float) _inner_distributions.size();
+}
