@@ -19,6 +19,12 @@ glm::quat stream_quat(std::istream* in_stream) {
     return {w, x, y, z};
 }
 
+glm::vec3 fast_rotate(glm::quat quat, glm::vec3 vec) {
+    glm::vec3 cut_quat = {quat.x, quat.y, quat.z};
+    glm::vec3 t = 2.f * glm::cross(cut_quat, vec);
+    return vec + quat.w * t + glm::cross(cut_quat, t);
+}
+
 float pick_t(float t1, float t2) {
     if (t1 > t2)
         std::swap(t1, t2);
@@ -229,8 +235,8 @@ std::pair<float, float> Primitive::get_ts(glm::vec3 O, glm::vec3 D) {
 
     glm::quat reverse_rotation = glm::conjugate(_rotation);
 
-    O = glm::rotate(reverse_rotation, O);
-    D = glm::rotate(reverse_rotation, D);
+    O = fast_rotate(reverse_rotation, O);
+    D = fast_rotate(reverse_rotation, D);
 
     return _geometry->get_ts(O, D);
 }
@@ -245,9 +251,9 @@ glm::vec3 Primitive::get_normal(glm::vec3 P) {
     glm::quat reverse_rotation = glm::conjugate(_rotation);
 
     P -= _position;
-    P = glm::rotate(reverse_rotation, P);
+    P = fast_rotate(reverse_rotation, P);
 
-    return glm::normalize(glm::rotate(_rotation, _geometry->get_normal(P)));
+    return glm::normalize(fast_rotate(_rotation, _geometry->get_normal(P)));
 }
 
 glm::vec3 Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& scene, int recursion_depth) {
@@ -337,7 +343,7 @@ glm::vec3 Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& s
 glm::vec3 Primitive::get_random_point(RandomEngine& random_engine) {
     glm::vec3 P = _geometry->get_random_point(random_engine);
 
-    P = glm::rotate(_rotation, P);
+    P = fast_rotate(_rotation, P);
     P += _position;
 
     return P;
@@ -347,7 +353,7 @@ float Primitive::get_point_pdf(glm::vec3 P) {
     glm::quat reverse_rotation = glm::conjugate(_rotation);
 
     P -= _position;
-    P = glm::rotate(reverse_rotation, P);
+    P = fast_rotate(reverse_rotation, P);
 
     return _geometry->get_point_pdf(P);
 }
