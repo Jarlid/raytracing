@@ -319,15 +319,22 @@ glm::vec3 Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& s
 
     Distribution* distribution = scene.distribution();
     glm::vec3 new_D = distribution->sample(P, N, *scene.random_engine());
+
+    if (glm::dot(new_D, N) < 0) {
+        check_color(_emission, 873462);
+        return _emission;
+    }
+
     float pdf = distribution->pdf(P, N, new_D);
 
     glm::vec3 L_in = scene.get_color(P + new_D * EPSILON, new_D, recursion_depth + 1);
 
-    glm::vec3 color;
-    if (pdf == 0 || std::isnan(pdf) || std::isinf(pdf))
-        color = _emission;
-    else
-        color = _emission + _color * L_in * fmaxf(0, glm::dot(new_D, N)) / (float) M_PI / pdf;
+    if (pdf == 0 || std::isnan(pdf) || std::isinf(pdf)) {
+        check_color(_emission, 873463);
+        return _emission;
+    }
+
+    glm::vec3 color = _emission + _color * L_in * fmaxf(0, glm::dot(new_D, N)) / (float) M_PI / pdf;
 
     if (std::isnan(color.x))
         color.x = 0;
