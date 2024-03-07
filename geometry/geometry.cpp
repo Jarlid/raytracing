@@ -323,11 +323,11 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
     else
         color = *_emission + *_color * *L_in * fmaxf(0, glm::dot(new_D, N)) / (float) M_PI / pdf;
 
-    if (_isnanf(color.x))
+    if (std::isnan(color.x))
         color.x = 0;
-    if (_isnanf(color.y))
+    if (std::isnan(color.y))
         color.y = 0;
-    if (_isnanf(color.z))
+    if (std::isnan(color.z))
         color.z = 0;
 
     check_color(color, 873464);
