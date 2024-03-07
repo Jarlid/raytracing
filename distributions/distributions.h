@@ -8,32 +8,35 @@
 #include "geometry/geometry.h"
 
 struct Distribution {
-    virtual glm::vec3* sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) = 0;
+    virtual glm::vec3 sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) = 0;
     virtual float pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) = 0;
 };
 
-class UniformHemisphere: Distribution {
+struct UniformHemisphere: Distribution {
+private:
     std::uniform_real_distribution<float> _base_distribution = std::uniform_real_distribution<float>(-1, 1);
 
 public:
-    glm::vec3* sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) override;
+    glm::vec3 sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) override;
     float pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) override;
 };
 
-class CosineHemisphere: Distribution {
+struct CosineHemisphere: Distribution {
+private:
     std::uniform_real_distribution<float> _base_distribution = std::uniform_real_distribution<float>(-1, 1);
 
 public:
-    glm::vec3* sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) override;
+    glm::vec3 sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) override;
     float pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) override;
 };
 
-class LightSource: Distribution {
+struct LightSource: Distribution {
+private:
     Primitive* _primitive;
 
 public:
     explicit LightSource(Primitive* primitive);
 
-    glm::vec3* sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) override;
+    glm::vec3 sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) override;
     float pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) override;
 };
