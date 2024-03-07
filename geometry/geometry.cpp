@@ -441,12 +441,14 @@ Scene::Scene(std::ifstream* in_stream) {
         _primitives.push_back(primitive);
     }
 
-    if (light_sources.empty())
+/*  if (light_sources.empty())
         _distribution = new CosineHemisphere();
     else if (light_sources.size() == 1)
         _distribution = new Mix({new CosineHemisphere(), light_sources[0]});
     else
-        _distribution = new Mix({new CosineHemisphere(), new Mix(light_sources)});
+        _distribution = new Mix({new CosineHemisphere(), new Mix(light_sources)});*/
+
+    _distribution = new CosineHemisphere();
 }
 
 std::pair<float, Primitive*> Scene::get_t(glm::vec3 O, glm::vec3 D) const {
