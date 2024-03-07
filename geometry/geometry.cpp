@@ -318,7 +318,7 @@ glm::vec3 *Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& 
     float pdf = distribution.pdf(P, N, new_D);
 
     glm::vec3 color;
-    if (pdf == 0 || _isnanf(pdf) || std::isinf(pdf))
+    if (pdf == 0 || std::isnan(pdf) || std::isinf(pdf))
         color = *_emission;
     else
         color = *_emission + *_color * *L_in * fmaxf(0, glm::dot(new_D, N)) / (float) M_PI / pdf;
