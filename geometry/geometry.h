@@ -12,8 +12,6 @@
 
 #include "distributions/engine.h"
 
-// TODO: убрать утечки памяти
-
 #define GAMMA (1 / 2.2)
 #define EPSILON 0.0001f
 #define F_INF std::numeric_limits<float>::infinity()
@@ -93,15 +91,15 @@ class Primitive {
 private:
     Geometry* _geometry;
 
-    glm::vec3 _color = glm::vec3(0, 0, 0);
+    glm::vec3 _color{0};
 
-    glm::vec3 _position = glm::vec3(0, 0, 0);
-    glm::quat _rotation = glm::quat(1, 0, 0, 0);
+    glm::vec3 _position{0};
+    glm::quat _rotation{1, 0, 0, 0};
 
     Material _material = Material::DIFFUSER;
     float _ior = 1; // коэффициент преломления (имеет смысл только для диэлектриков)
 
-    glm::vec3 _emission = glm::vec3(0, 0, 0);
+    glm::vec3 _emission{0};
 
 public:
     explicit Primitive(std::istream* in_stream);

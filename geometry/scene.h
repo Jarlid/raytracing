@@ -6,13 +6,13 @@ class Scene {
 private:
     int _dimension_width = 0, _dimension_height = 0;
 
-    glm::vec3 _bg_color;
+    glm::vec3 _bg_color{0};
 
-    glm::vec3 _camera_position;
+    glm::vec3 _camera_position{};
 
-    glm::vec3 _camera_right;
-    glm::vec3 _camera_up;
-    glm::vec3 _camera_forward;
+    glm::vec3 _camera_right{};
+    glm::vec3 _camera_up{};
+    glm::vec3 _camera_forward{};
 
     float _camera_fov_x = 0;
 
