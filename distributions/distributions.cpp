@@ -61,8 +61,11 @@ float LightSource::pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) {
         glm::vec3 prim_P = P + tD;
         glm::vec3 prim_N = _primitive->get_normal(prim_P);
 
-        pdf += _primitive->get_point_pdf(P + tD) * powf(glm::length(tD), 2) /
-                std::abs((float) glm::dot(D, prim_N));
+        float addon = _primitive->get_point_pdf(P + tD) * powf(glm::length(tD), 2) /
+                      std::abs((float) glm::dot(D, prim_N));
+        if (std::isnan(addon) or std::isinf(addon))
+            addon = 0;
+        pdf += addon;
     }
 
     return pdf;

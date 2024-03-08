@@ -128,7 +128,7 @@ glm::vec3 Ellipsoid::get_random_point(RandomEngine &random_engine) {
 }
 
 float Ellipsoid::get_point_pdf(glm::vec3 P) {
-    glm::vec3 N = get_normal(P);
+    glm::vec3 N = glm::normalize(P / _r);
     glm::vec3 R2 = _r * _r;
     return 0.25f / (float) M_PI / sqrtf(N.x * N.x * R2.y * R2.z + R2.x * N.y * N.y * R2.z + R2.x * R2.y * N.z * N.z);
 }
