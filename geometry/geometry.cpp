@@ -60,7 +60,7 @@ float Geometry::base_distribution(RandomEngine& random_engine, bool including_ne
         _forbidden_base_distribution = new std::uniform_real_distribution<float>(-1, 1);
     if (including_negative)
         return (*_forbidden_base_distribution)(random_engine);
-    return abs((*_forbidden_base_distribution)(random_engine));
+    return std::abs((*_forbidden_base_distribution)(random_engine));
 }
 
 bool Geometry::is_plane() {
@@ -326,13 +326,12 @@ glm::vec3 Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& s
     }
 
     float pdf = distribution->pdf(P, N, new_D);
-
-    glm::vec3 L_in = scene.get_color(P + new_D * EPSILON, new_D, recursion_depth + 1);
-
-    if (pdf == 0 || std::isnan(pdf) || std::isinf(pdf)) {
+    if (pdf == 0) {
         check_color(_emission, 873463);
         return _emission;
     }
+
+    glm::vec3 L_in = scene.get_color(P + new_D * EPSILON, new_D, recursion_depth + 1);
 
     glm::vec3 color = _emission + _color * L_in * fmaxf(0, glm::dot(new_D, N)) / (float) M_PI / pdf;
 
@@ -544,7 +543,7 @@ int Scene::height() const {
     return _dimension_height;
 }
 
-std::default_random_engine* Scene::random_engine() const {
+RandomEngine* Scene::random_engine() const {
     return _random_engine;
 }
 
