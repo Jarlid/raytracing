@@ -13,7 +13,7 @@ int main(int argc, char* argv[]) {
     std::cout << in_file << std::endl << out_file << std::endl;
 
     std::ifstream in_stream(in_file);
-    Scene scene(&in_stream);
+    Scene scene(in_stream);
     in_stream.close();
 
     std::ofstream out_stream(out_file, std::ios_base::binary);

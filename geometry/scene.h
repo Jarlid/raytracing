@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "distributions/distributions.h"
 
 class Scene {
@@ -16,18 +18,18 @@ private:
 
     float _camera_fov_x = 0;
 
-    std::vector<Primitive*> _primitives;
+    std::vector<std::unique_ptr<Primitive>> _primitives;
 
     int _ray_depth = 1;
 
     int _sample_num = 1;
 
-    RandomEngine* _random_engine = new RandomEngine();
+    std::unique_ptr<RandomEngine> _random_engine = std::make_unique<RandomEngine>();
 
-    Distribution* _distribution;
+    std::unique_ptr<Distribution> _distribution;
 
 public:
-    explicit Scene(std::ifstream* in_stream);
+    explicit Scene(std::ifstream& in_stream);
 
     std::pair<float, Primitive*> get_t(glm::vec3 O, glm::vec3 D) const;
 

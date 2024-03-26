@@ -35,12 +35,11 @@ float CosineHemisphere::pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) {
     return fmaxf(0, glm::dot(N, D) / (float) M_PI);
 }
 
-LightSource::LightSource(Primitive* primitive) {
-    _primitive = primitive;
+LightSource::LightSource(Primitive& primitive) : _primitive(primitive) {
 }
 
 glm::vec3 LightSource::sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) {
-    return glm::normalize(_primitive->get_random_point(random_engine) - P);
+    return glm::normalize(_primitive.get_random_point(random_engine) - P);
 }
 
 float LightSource::pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) {
@@ -48,20 +47,24 @@ float LightSource::pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) {
     D = glm::normalize(D);
 
     float t1, t2;
-    std::tie(t1, t2) = _primitive->get_ts(P, D);
+    std::tie(t1, t2) = _primitive.get_ts(P, D);
 
-    std::vector<float> ts;
+    float ts[2];
+    int ts_size = 0;
+
     if (t1 > 0)
-        ts.push_back(t1);
+        ts[ts_size++] = t1;
     if (t2 > 0)
-        ts.push_back(t2);
+        ts[ts_size++] = t2;
 
-    for (auto t : ts) {
+    for (int ts_i = 0; ts_i < ts_size; ++ts_i) {
+        float t = ts[ts_i];
+
         glm::vec3 tD = t * D;
         glm::vec3 prim_P = P + tD;
-        glm::vec3 prim_N = _primitive->get_normal(prim_P);
+        glm::vec3 prim_N = _primitive.get_normal(prim_P);
 
-        float addon = _primitive->get_point_pdf(P + tD) * powf(glm::length(tD), 2) /
+        float addon = _primitive.get_point_pdf(P + tD) * powf(glm::length(tD), 2) /
                       std::abs((float) glm::dot(D, prim_N));
         if (std::isnan(addon) or std::isinf(addon))
             return F_INF;
@@ -71,7 +74,7 @@ float LightSource::pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) {
     return pdf;
 }
 
-Mix::Mix(std::vector<Distribution*> distributions) {
+Mix::Mix(std::vector<std::unique_ptr<Distribution>> distributions) {
     _inner_distributions = std::move(distributions);
 }
 

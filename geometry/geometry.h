@@ -4,6 +4,7 @@
 #include <vector>
 #include <tuple>
 #include <random>
+#include <memory>
 
 #define GLM_ENABLE_EXPERIMENTAL
 
@@ -19,11 +20,14 @@
 struct Geometry {
 private:
     std::uniform_real_distribution<float>* _forbidden_base_distribution = nullptr;
+    // TODO: убрать указатель. Возможно, стоит заменить на std::optional.
 
 protected:
     float base_distribution(RandomEngine& random_engine, bool including_negative);
 
 public:
+    virtual ~Geometry() = default;
+
     virtual bool is_plane();
 
     virtual std::pair<float, float> get_ts(glm::vec3 O, glm::vec3 D) = 0; // Формула: P = O + t * D
@@ -40,7 +44,7 @@ private:
     glm::vec3 _n{};
 
 public:
-    explicit Plane(std::istream* in_stream);
+    explicit Plane(std::istream& in_stream);
 
     bool is_plane() override;
 
@@ -56,7 +60,7 @@ private:
     glm::vec3 _r{};
 
 public:
-    explicit Ellipsoid(std::istream* in_stream);
+    explicit Ellipsoid(std::istream& in_stream);
 
     std::pair<float, float> get_ts(glm::vec3 O, glm::vec3 D) override;
     glm::vec3 get_normal(glm::vec3 P) override;
@@ -70,7 +74,7 @@ private:
     glm::vec3 _s{};
 
 public:
-    explicit Box(std::istream* in_stream);
+    explicit Box(std::istream& in_stream);
 
     std::pair<float, float> get_ts(glm::vec3 O, glm::vec3 D) override;
     glm::vec3 get_normal(glm::vec3 P) override;
@@ -82,27 +86,27 @@ public:
 enum class Material {
     METALLIC,
     DIELECTRIC,
-    DIFFUSER
+    DIFFUSIVE
 };
 
 class Scene;
 
 class Primitive {
 private:
-    Geometry* _geometry;
+    std::unique_ptr<Geometry> _geometry;
 
     glm::vec3 _color{0};
 
     glm::vec3 _position{0};
     glm::quat _rotation{1, 0, 0, 0};
 
-    Material _material = Material::DIFFUSER;
+    Material _material = Material::DIFFUSIVE;
     float _ior = 1; // коэффициент преломления (имеет смысл только для диэлектриков)
 
     glm::vec3 _emission{0};
 
 public:
-    explicit Primitive(std::istream* in_stream);
+    explicit Primitive(std::istream& in_stream);
 
     bool is_plane();
     bool has_emission();

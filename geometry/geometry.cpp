@@ -3,19 +3,20 @@
 
 #include <cmath>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <algorithm>
 #include <tuple>
 
-glm::vec3 stream_vec3(std::istream* in_stream) {
+glm::vec3 stream_vec3(std::istream& in_stream) {
     float x, y, z = 0;
-    *in_stream >> x >> y >> z;
+    in_stream >> x >> y >> z;
     return {x, y, z};
 }
 
-glm::quat stream_quat(std::istream* in_stream) {
+glm::quat stream_quat(std::istream& in_stream) {
     float x, y, z, w = 0;
-    *in_stream >> x >> y >> z >> w;
+    in_stream >> x >> y >> z >> w;
     return {w, x, y, z};
 }
 
@@ -67,7 +68,7 @@ bool Geometry::is_plane() {
     return false;
 }
 
-Plane::Plane(std::istream* in_stream) {
+Plane::Plane(std::istream& in_stream) {
     _n = stream_vec3(in_stream);
 }
 
@@ -91,7 +92,7 @@ float Plane::get_point_pdf(glm::vec3 P) {
     exit(498724);
 }
 
-Ellipsoid::Ellipsoid(std::istream* in_stream) {
+Ellipsoid::Ellipsoid(std::istream& in_stream) {
     _r = stream_vec3(in_stream);
 }
 
@@ -133,7 +134,7 @@ float Ellipsoid::get_point_pdf(glm::vec3 P) {
     return 0.25f / (float) M_PI / sqrtf(N.x * N.x * R2.y * R2.z + R2.x * N.y * N.y * R2.z + R2.x * R2.y * N.z * N.z);
 }
 
-Box::Box(std::istream* in_stream) {
+Box::Box(std::istream& in_stream) {
     _s = stream_vec3(in_stream);
 }
 
@@ -193,18 +194,18 @@ float Box::get_point_pdf(glm::vec3 P) {
     return 1.f / 8 / (_s.y * _s.z + _s.x * _s.z + _s.y * _s.z);
 }
 
-Primitive::Primitive(std::istream* in_stream) {
+Primitive::Primitive(std::istream& in_stream) {
     std::string command;
 
-    while (*in_stream >> command) {
+    while (in_stream >> command) {
         std::transform(command.begin(), command.end(), command.begin(), ::toupper);
 
         if (command == "PLANE")
-            _geometry = new Plane(in_stream);
+            _geometry = std::unique_ptr<Geometry>(new Plane(in_stream));
         else if (command == "ELLIPSOID")
-            _geometry = new Ellipsoid(in_stream);
+            _geometry = std::unique_ptr<Geometry>(new Ellipsoid(in_stream));
         else if (command == "BOX")
-            _geometry = new Box(in_stream);
+            _geometry = std::unique_ptr<Geometry>(new Box(in_stream));
         else if (command == "COLOR")
             _color = stream_vec3(in_stream);
         else if (command == "POSITION")
@@ -216,7 +217,7 @@ Primitive::Primitive(std::istream* in_stream) {
         else if (command == "DIELECTRIC")
             _material = Material::DIELECTRIC;
         else if (command == "IOR")
-            *in_stream >> _ior;
+            in_stream >> _ior;
         else if (command == "EMISSION")
             _emission = stream_vec3(in_stream);
     }
@@ -315,7 +316,7 @@ glm::vec3 Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& s
         return refracted_color;
     }
 
-    // if (_material == Material::DIFFUSER)
+    // if (_material == Material::DIFFUSIVE)
 
     Distribution* distribution = scene.distribution();
     glm::vec3 new_D = distribution->sample(P, N, *scene.random_engine());
@@ -326,7 +327,7 @@ glm::vec3 Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& s
     }
 
     float pdf = distribution->pdf(P, N, new_D);
-    if (pdf == 0) {
+    if (pdf == 0 or pdf == F_INF) {
         check_color(_emission, 873463);
         return _emission;
     }
@@ -364,22 +365,22 @@ float Primitive::get_point_pdf(glm::vec3 P) {
     return _geometry->get_point_pdf(P);
 }
 
-Scene::Scene(std::ifstream* in_stream) {
+Scene::Scene(std::ifstream& in_stream) {
     std::string command;
-    std::stringstream* primitive_stream;
+    std::stringstream primitive_stream;
 
     bool new_primitive = false;
 
-    std::vector<Distribution*> light_sources;
+    std::vector<std::unique_ptr<Distribution>> light_sources;
 
-    while (*in_stream >> command) {
+    while (in_stream >> command) {
         std::transform(command.begin(), command.end(), command.begin(), ::toupper);
 
         bool not_primitive_or_light = false;
 
         if (command == "DIMENSIONS") {
             not_primitive_or_light = true;
-            *in_stream >> _dimension_width >> _dimension_height;
+            in_stream >> _dimension_width >> _dimension_height;
         }
         else if (command == "BG_COLOR") {
             not_primitive_or_light = true;
@@ -404,27 +405,28 @@ Scene::Scene(std::ifstream* in_stream) {
         }
         else if (command == "CAMERA_FOV_X") {
             not_primitive_or_light = true;
-            *in_stream >> _camera_fov_x;
+            in_stream >> _camera_fov_x;
         }
         else if (command == "RAY_DEPTH") {
             not_primitive_or_light = true;
-            *in_stream >> _ray_depth;
+            in_stream >> _ray_depth;
         }
         else if (command == "SAMPLES") {
             not_primitive_or_light = true;
-            *in_stream >> _sample_num;
+            in_stream >> _sample_num;
         }
 
         if (not_primitive_or_light || command == "NEW_PRIMITIVE") {
             if (new_primitive) {
                 new_primitive = false;
 
-                auto primitive = new Primitive(primitive_stream);
+                std::unique_ptr<Primitive> primitive = std::make_unique<Primitive>(primitive_stream);
 
                 if (not primitive->is_plane() and primitive->has_emission())
-                    light_sources.push_back(new LightSource(primitive));
+                    light_sources.push_back(
+                            std::move(std::unique_ptr<Distribution>(new LightSource(*primitive))));
 
-                _primitives.push_back(primitive);
+                _primitives.push_back(std::move(primitive));
             }
         }
         if (not_primitive_or_light)
@@ -432,38 +434,52 @@ Scene::Scene(std::ifstream* in_stream) {
 
         if (command == "NEW_PRIMITIVE") {
             new_primitive = true;
-            primitive_stream = new std::stringstream();
+            primitive_stream = std::stringstream();
         }
         else if (new_primitive)
-            *primitive_stream << command << " ";
+            primitive_stream << command << " ";
     }
 
     if (new_primitive) {
-        auto primitive = new Primitive(primitive_stream);
+        auto primitive = std::make_unique<Primitive>(primitive_stream);
 
         if (not primitive->is_plane() and primitive->has_emission())
-            light_sources.push_back(new LightSource(primitive));
+            light_sources.push_back(std::move(std::unique_ptr<Distribution>(new LightSource(*primitive))));
 
-        _primitives.push_back(primitive);
+        _primitives.push_back(std::move(primitive));
     }
 
+    _distribution = std::unique_ptr<Distribution>(new CosineHemisphere());
+
     if (light_sources.empty())
-        _distribution = new CosineHemisphere();
-    else if (light_sources.size() == 1)
-        _distribution = new Mix({new CosineHemisphere(), light_sources[0]});
-    else
-        _distribution = new Mix({new CosineHemisphere(), new Mix(light_sources)});
+        _distribution = std::unique_ptr<Distribution>(new CosineHemisphere());
+    else if (light_sources.size() == 1) {
+        std::vector<std::unique_ptr<Distribution>> distributions;
+
+        distributions.push_back(std::unique_ptr<Distribution>(new CosineHemisphere()));
+        distributions.push_back(std::move(light_sources[0]));
+
+        _distribution = std::unique_ptr<Distribution>(new Mix(std::move(distributions)));
+    }
+    else {
+        std::vector<std::unique_ptr<Distribution>> distributions;
+
+        distributions.push_back(std::unique_ptr<Distribution>(new CosineHemisphere()));
+        distributions.push_back(std::unique_ptr<Distribution>(new Mix(std::move(light_sources))));
+
+        _distribution = std::unique_ptr<Distribution>(new Mix(std::move(distributions)));
+    }
 }
 
 std::pair<float, Primitive*> Scene::get_t(glm::vec3 O, glm::vec3 D) const {
     float t = -1;
     Primitive* curr_primitive = nullptr;
 
-    for (auto primitive : _primitives) {
+    for (auto& primitive : _primitives) {
         float new_t = primitive->get_t(O, D);
         if (t <= 0 or (new_t > 0 and new_t < t)) {
             t = new_t;
-            curr_primitive = primitive;
+            curr_primitive = primitive.get();
         }
     }
 
@@ -544,9 +560,9 @@ int Scene::height() const {
 }
 
 RandomEngine* Scene::random_engine() const {
-    return _random_engine;
+    return _random_engine.get();
 }
 
 Distribution* Scene::distribution() const {
-    return _distribution;
+    return _distribution.get();
 }

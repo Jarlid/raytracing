@@ -8,6 +8,8 @@
 #include "geometry/geometry.h"
 
 struct Distribution {
+    virtual ~Distribution() = default;
+
     virtual glm::vec3 sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) = 0;
     virtual float pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) = 0;
 };
@@ -32,10 +34,10 @@ public:
 
 struct LightSource: Distribution {
 private:
-    Primitive* _primitive;
+    Primitive& _primitive;
 
 public:
-    explicit LightSource(Primitive* primitive);
+    explicit LightSource(Primitive& primitive);
 
     glm::vec3 sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) override;
     float pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) override;
@@ -43,11 +45,11 @@ public:
 
 struct Mix: Distribution {
 private:
-    std::vector<Distribution*> _inner_distributions;
+    std::vector<std::unique_ptr<Distribution>> _inner_distributions;
     std::uniform_real_distribution<float> _base_distribution = std::uniform_real_distribution<float>(0, 1);
 
 public:
-    explicit Mix(std::vector<Distribution*> distributions);
+    explicit Mix(std::vector<std::unique_ptr<Distribution>> distributions);
 
     glm::vec3 sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) override;
     float pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) override;
