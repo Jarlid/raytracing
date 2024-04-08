@@ -196,6 +196,36 @@ float Box::get_point_pdf(glm::vec3 P) {
     return 1.f / 8 / (_s.y * _s.z + _s.x * _s.z + _s.y * _s.z);
 }
 
+Triangle::Triangle(std::istream &in_stream) {
+    _a = stream_vec3(in_stream);
+    _b = stream_vec3(in_stream);
+    _c = stream_vec3(in_stream);
+}
+
+std::pair<float, float> Triangle::get_ts(glm::vec3 O, glm::vec3 D) {
+    glm::mat3x3 linear_system(_b - _a, _c - _a, -D);
+    glm::vec3 u_v_t = glm::inverse(linear_system) * (O - _a);
+
+    float u = u_v_t.x, v = u_v_t.y, t = u_v_t.z;
+    if (u < 0 or v < 0 or u + v > 1)
+        return {-F_INF, -F_INF};
+    return {t, -F_INF};
+}
+
+glm::vec3 Triangle::get_normal(glm::vec3 P) {
+    return glm::normalize(glm::cross(_b - _a, _c - _a));
+}
+
+glm::vec3 Triangle::get_random_point(RandomEngine &random_engine) {
+    float u = base_distribution(random_engine, false);
+    float v = base_distribution(random_engine, false);
+    return _a + u * (_b - _a) + v * (_c - _a);
+}
+
+float Triangle::get_point_pdf(glm::vec3 P) {
+    return 1 / glm::length(glm::cross(_b - _a, _c - _a));
+}
+
 Primitive::Primitive(std::istream& in_stream) {
     std::string command;
 
@@ -208,6 +238,8 @@ Primitive::Primitive(std::istream& in_stream) {
             _geometry = std::unique_ptr<Geometry>(new Ellipsoid(in_stream));
         else if (command == "BOX")
             _geometry = std::unique_ptr<Geometry>(new Box(in_stream));
+        else if (command == "TRIANGLE")
+            _geometry = std::unique_ptr<Geometry>(new Triangle(in_stream));
         else if (command == "COLOR")
             _color = stream_vec3(in_stream);
         else if (command == "POSITION")

@@ -83,6 +83,20 @@ public:
     float get_point_pdf(glm::vec3 P) override;
 };
 
+struct Triangle: Geometry {
+private:
+    glm::vec3 _a{}, _b{}, _c{};
+
+public:
+    explicit Triangle(std::istream& in_stream);
+
+    std::pair<float, float> get_ts(glm::vec3 O, glm::vec3 D) override;
+    glm::vec3 get_normal(glm::vec3 P) override;
+
+    glm::vec3 get_random_point(RandomEngine& random_engine) override;
+    float get_point_pdf(glm::vec3 P) override;
+};
+
 enum class Material {
     METALLIC,
     DIELECTRIC,
