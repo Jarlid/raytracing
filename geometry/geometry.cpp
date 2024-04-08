@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <tuple>
 
+#include <omp.h>
+
 glm::vec3 stream_vec3(std::istream& in_stream) {
     float x, y, z = 0;
     in_stream >> x >> y >> z;
@@ -292,7 +294,7 @@ glm::vec3 Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& s
         float R = R0 + (1 - R0) * powf(1 - cos_t1, 5);
 
         std::uniform_real_distribution<float> distribution(0, 1);
-        float U = distribution(*scene.random_engine());
+        float U = distribution(*scene.random_engine(omp_get_thread_num()));
 
         if (sin_t2 > 1 or U < R) {
             glm::vec3 reflected_D = glm::normalize(D - 2.f * glm::dot(N, D) * N);
@@ -319,7 +321,7 @@ glm::vec3 Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& s
     // if (_material == Material::DIFFUSIVE)
 
     Distribution* distribution = scene.distribution();
-    glm::vec3 new_D = distribution->sample(P, N, *scene.random_engine());
+    glm::vec3 new_D = distribution->sample(P, N, *scene.random_engine(omp_get_thread_num()));
 
     if (glm::dot(new_D, N) < 0) {
         check_color(_emission, 873462);
@@ -366,6 +368,10 @@ float Primitive::get_point_pdf(glm::vec3 P) {
 }
 
 Scene::Scene(std::ifstream& in_stream) {
+    int max_thead_num = omp_get_max_threads();
+    for (int i = 0; i < max_thead_num; ++i)
+        _random_engines.push_back(std::make_unique<RandomEngine>(i));
+
     std::string command;
     std::stringstream primitive_stream;
 
@@ -518,13 +524,15 @@ std::vector<uint8_t> Scene::render() const {
 
     std::uniform_real_distribution<float> distribution(0, 1);
 
+    #pragma omp parallel for collapse(2) default(none) shared(distribution, tan_half_fov_x, tan_half_fov_y, render)
     for (int p_x = 0; p_x < _dimension_width; ++p_x) {
         for (int p_y = 0; p_y < _dimension_height; ++p_y) {
             auto color_sum = glm::vec3(0);
 
             for (int curr_sample = 0; curr_sample < _sample_num; ++curr_sample) {
-                float u_x = distribution(*_random_engine);
-                float u_y = distribution(*_random_engine);
+                auto curr_random_engine = random_engine(omp_get_thread_num());
+                float u_x = distribution(*curr_random_engine);
+                float u_y = distribution(*curr_random_engine);
 
                 float c_x = (2 * ((float) p_x + u_x) / (float) _dimension_width - 1) * tan_half_fov_x;
                 float c_y = -1 * (2 * ((float) p_y + u_y) / (float) _dimension_height - 1) * tan_half_fov_y;
@@ -559,8 +567,8 @@ int Scene::height() const {
     return _dimension_height;
 }
 
-RandomEngine* Scene::random_engine() const {
-    return _random_engine.get();
+RandomEngine* Scene::random_engine(int thread) const {
+    return _random_engines[thread].get();
 }
 
 Distribution* Scene::distribution() const {

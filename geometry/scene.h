@@ -24,7 +24,7 @@ private:
 
     int _sample_num = 1;
 
-    std::unique_ptr<RandomEngine> _random_engine = std::make_unique<RandomEngine>();
+    std::vector<std::unique_ptr<RandomEngine>> _random_engines;
 
     std::unique_ptr<Distribution> _distribution;
 
@@ -41,6 +41,6 @@ public:
     int width() const;
     int height() const;
 
-    RandomEngine* random_engine() const;
+    RandomEngine* random_engine(int thread) const;
     Distribution* distribution() const;
 };
