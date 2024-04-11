@@ -209,7 +209,7 @@ std::pair<float, float> Triangle::get_ts(glm::vec3 O, glm::vec3 D) {
     float u = u_v_t.x, v = u_v_t.y, t = u_v_t.z;
     if (u < 0 or v < 0 or u + v > 1)
         return {-F_INF, -F_INF};
-    return {t, -F_INF};
+    return {-F_INF, t};
 }
 
 glm::vec3 Triangle::get_normal(glm::vec3 P) {
@@ -219,11 +219,17 @@ glm::vec3 Triangle::get_normal(glm::vec3 P) {
 glm::vec3 Triangle::get_random_point(RandomEngine &random_engine) {
     float u = base_distribution(random_engine, false);
     float v = base_distribution(random_engine, false);
+
+    if (u + v > 1) {
+        u = 1 - u;
+        v = 1 - v;
+    }
+
     return _a + u * (_b - _a) + v * (_c - _a);
 }
 
 float Triangle::get_point_pdf(glm::vec3 P) {
-    return 1 / glm::length(glm::cross(_b - _a, _c - _a));
+    return 2 / glm::length(glm::cross(_b - _a, _c - _a));
 }
 
 Primitive::Primitive(std::istream& in_stream) {
@@ -360,7 +366,7 @@ glm::vec3 Primitive::get_color(glm::vec3 O, glm::vec3 D, float t, const Scene& s
         return _emission;
     }
 
-    float pdf = distribution->pdf(P, N, new_D);
+    float pdf = distribution->pdf(P + new_D * EPSILON, N, new_D);
     if (pdf == 0 or pdf == F_INF) {
         check_color(_emission, 873463);
         return _emission;
