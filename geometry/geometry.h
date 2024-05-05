@@ -17,6 +17,8 @@
 #define EPSILON 0.0001f
 #define F_INF std::numeric_limits<float>::infinity()
 
+#define DEFAULT_IOR 1.5
+
 struct Geometry {
 private:
     std::uniform_real_distribution<float>* _forbidden_base_distribution = nullptr;
@@ -116,7 +118,7 @@ private:
     glm::quat _rotation{1, 0, 0, 0};
 
     Material _material = Material::DIFFUSIVE;
-    float _ior = 1; // коэффициент преломления (имеет смысл только для диэлектриков)
+    float _ior = DEFAULT_IOR; // коэффициент преломления (имеет смысл только для диэлектриков)
 
     glm::vec3 _emission{0};
 
@@ -125,6 +127,8 @@ public:
     Primitive(glm::vec3 a, glm::vec3 b, glm::vec3 c);
 
     void set_color(glm::vec3 color);
+    void set_material(Material material);
+    void set_emission(glm::vec3 emission);
 
     bool is_plane();
     bool has_emission();

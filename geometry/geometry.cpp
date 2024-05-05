@@ -279,6 +279,14 @@ void Primitive::set_color(glm::vec3 color) {
     _color = color;
 }
 
+void Primitive::set_material(Material material) {
+    _material = material;
+}
+
+void Primitive::set_emission(glm::vec3 emission) {
+    _emission = emission;
+}
+
 bool Primitive::is_plane() {
     return _geometry->is_plane();
 }
@@ -424,9 +432,17 @@ float Primitive::get_point_pdf(glm::vec3 P) {
 template<typename T>
 glm::vec3 get_vec3_from_array(rapidjson::GenericArray<true, T> array) {
     if (array.Size() != 3)
-        exit(983573451);
+        exit(983573450);
 
     return {array[0].GetFloat(), array[1].GetFloat(), array[2].GetFloat()};
+}
+
+template<typename T>
+glm::vec4 get_vec4_from_array(rapidjson::GenericArray<true, T> array) {
+    if (array.Size() != 4)
+        exit(983573451);
+
+    return {array[0].GetFloat(), array[1].GetFloat(), array[2].GetFloat(), array[3].GetFloat()};
 }
 
 template<typename T>
@@ -563,15 +579,52 @@ void Scene::initialize_node(const rapidjson::Document& document, int node_num, g
                 exit(937423985);
             std::vector<glm::vec3> positions = get_vec3s_from_buffer(positions_buffer, positions_count);
 
+            // Adding material properties.
+
+            glm::vec4 color(1, 1, 1, 1);
+            Material material = Material::METALLIC;
+            glm::vec3 emission(0);
+
+            if (mesh_primitives[primitive_num].HasMember("material")) {
+                int material_num = mesh_primitives[primitive_num]["material"].GetInt();
+
+                if (document["materials"][material_num]["pbrMetallicRoughness"].HasMember("baseColorFactor"))
+                    color = get_vec4_from_array(
+                            document["materials"][material_num]["pbrMetallicRoughness"]["baseColorFactor"].GetArray()
+                    );
+
+                if (color.a < 1)
+                    material = Material::DIELECTRIC;
+                else if (document["materials"][material_num]["pbrMetallicRoughness"].HasMember("metallicFactor")
+                         and
+                         document["materials"][material_num]["pbrMetallicRoughness"]["metallicFactor"].GetFloat() == 0)
+                    material = Material::DIFFUSIVE;
+
+                if (document["materials"][material_num].HasMember("emissiveFactor"))
+                    emission = get_vec3_from_array(
+                            document["materials"][material_num]["emissiveFactor"].GetArray()
+                    );
+
+                if (document["extensionsUsed"].HasMember("KHR_materials_emissive_strength") and
+                    document["materials"][material_num]["extensions"]["KHR_materials_emissive_strength"]
+                    .HasMember("emissiveStrength"))
+                    emission *= document["materials"][material_num]
+                            ["extensions"]["KHR_materials_emissive_strength"]["emissiveStrength"].GetFloat();
+            }
+
             for (int i = 0; i < indices.size(); i += 3) {
                 glm::vec3 a = glm::vec3(current_transform * glm::vec4(positions[indices[i]], 1));
                 glm::vec3 b = glm::vec3(current_transform * glm::vec4(positions[indices[i + 1]], 1));
                 glm::vec3 c = glm::vec3(current_transform * glm::vec4(positions[indices[i + 2]], 1));
 
-                auto p = std::make_unique<Primitive>(a, b, c);
-                p->set_color({1, 1, 1}); // TODO: actual color (and material)
+                auto primitive = std::make_unique<Primitive>(a, b, c);
+                primitive->set_color(glm::vec3(color));
+                primitive->set_material(material);
+                primitive->set_emission(emission);
 
-                _primitives.push_back(std::move(p));
+                // TODO: add emissive materials to light sources.
+
+                _primitives.push_back(std::move(primitive));
             }
         }
     }
@@ -623,8 +676,6 @@ Scene::Scene(const rapidjson::Document& document, int width, int height) {
     }
 
     _distribution = std::unique_ptr<Distribution>(new CosineHemisphere()); // TODO: add LightSource Distributions.
-
-    _bg_color = {1, 1, 1}; // TODO: delete
 }
 
 /*
