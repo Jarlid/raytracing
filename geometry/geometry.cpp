@@ -10,6 +10,8 @@
 
 #include <omp.h>
 
+#include <glm/gtx/matrix_decompose.hpp>
+
 glm::vec3 stream_vec3(std::istream& in_stream) {
     float x, y, z = 0;
     in_stream >> x >> y >> z;
@@ -202,6 +204,12 @@ Triangle::Triangle(std::istream &in_stream) {
     _c = stream_vec3(in_stream);
 }
 
+Triangle::Triangle(glm::vec3 a, glm::vec3 b, glm::vec3 c) {
+    _a = a;
+    _b = b;
+    _c = c;
+}
+
 std::pair<float, float> Triangle::get_ts(glm::vec3 O, glm::vec3 D) {
     glm::mat3x3 linear_system(_b - _a, _c - _a, -D);
     glm::vec3 u_v_t = glm::inverse(linear_system) * (O - _a);
@@ -261,6 +269,14 @@ Primitive::Primitive(std::istream& in_stream) {
         else if (command == "EMISSION")
             _emission = stream_vec3(in_stream);
     }
+}
+
+Primitive::Primitive(glm::vec3 a, glm::vec3 b, glm::vec3 c) {
+    _geometry = std::unique_ptr<Geometry>(new Triangle(a, b, c));
+}
+
+void Primitive::set_color(glm::vec3 color) {
+    _color = color;
 }
 
 bool Primitive::is_plane() {
@@ -405,6 +421,206 @@ float Primitive::get_point_pdf(glm::vec3 P) {
     return _geometry->get_point_pdf(P);
 }
 
+template<typename T>
+glm::vec3 get_vec3_from_array(rapidjson::GenericArray<true, T> array) {
+    if (array.Size() != 3)
+        exit(983573451);
+
+    return {array[0].GetFloat(), array[1].GetFloat(), array[2].GetFloat()};
+}
+
+template<typename T>
+glm::quat get_quat_from_array(rapidjson::GenericArray<true, T> array) {
+    if (array.Size() != 4)
+        exit(983573452);
+
+    return {array[3].GetFloat(), array[0].GetFloat(), array[1].GetFloat(), array[2].GetFloat()};
+}
+
+template<typename T>
+glm::mat4 get_mat4_from_array(rapidjson::GenericArray<true, T> array) {
+    if (array.Size() != 16)
+        exit(983573453);
+
+    return {
+            array[0].GetFloat(), array[1].GetFloat(), array[2].GetFloat(), array[3].GetFloat(),
+            array[4].GetFloat(), array[5].GetFloat(), array[6].GetFloat(), array[7].GetFloat(),
+            array[8].GetFloat(), array[9].GetFloat(), array[10].GetFloat(), array[11].GetFloat(),
+            array[12].GetFloat(), array[13].GetFloat(), array[14].GetFloat(), array[15].GetFloat(),
+    };
+}
+
+template<typename T>
+std::vector<unsigned int> get_numbers_from_buffer(unsigned char* buffer, int count) {
+    auto* typed_buffer = reinterpret_cast<T*>(buffer);
+    std::vector<unsigned int> numbers;
+
+    for (int i = 0; i < count; ++i)
+        numbers.push_back((unsigned int) typed_buffer[i]);
+
+    return numbers;
+}
+
+std::vector<glm::vec3> get_vec3s_from_buffer(unsigned char* buffer, int count) {
+    auto* typed_buffer = reinterpret_cast<float*>(buffer);
+    std::vector<glm::vec3> vec3s;
+
+    for (int i = 0; i < 3 * count; i += 3)
+        vec3s.emplace_back(typed_buffer[i], typed_buffer[i + 1], typed_buffer[i + 2]);
+
+    return vec3s;
+}
+
+void Scene::initialize_node(const rapidjson::Document& document, int node_num, glm::mat4 current_transform) {
+    if (document["nodes"][node_num].HasMember("matrix"))
+        current_transform =
+                get_mat4_from_array(document["nodes"][node_num]["matrix"].GetArray()) * current_transform;
+    else {
+        glm::mat4 additional_transform(1.0f);
+
+        if (document["nodes"][node_num].HasMember("scale")) {
+            glm::mat4 scale_matrix =
+                    glm::scale(glm::mat4(1.0f),
+                               get_vec3_from_array(document["nodes"][node_num]["scale"].GetArray()));
+            additional_transform = scale_matrix * additional_transform;
+        }
+
+        if (document["nodes"][node_num].HasMember("rotation")) {
+            glm::mat4 rotation_matrix =
+                    glm::mat4_cast(get_quat_from_array(document["nodes"][node_num]["rotation"].GetArray()));
+            additional_transform = rotation_matrix * additional_transform;
+        }
+
+        if (document["nodes"][node_num].HasMember("translation")) {
+            glm::mat4 translation_matrix =
+                    glm::translate(glm::mat4(1.0f),
+                                   get_vec3_from_array(document["nodes"][node_num]["translation"].GetArray()));
+            additional_transform = translation_matrix * additional_transform;
+        }
+
+        current_transform = additional_transform * current_transform;
+    }
+
+    if (not _camera_initialized and document["nodes"][node_num].HasMember("camera")) {
+        int camera_num = document["nodes"][node_num]["camera"].GetInt();
+
+        if (document["cameras"][camera_num]["type"] == "perspective") {
+            _camera_fov_y = document["cameras"][camera_num]["perspective"]["yfov"].GetFloat();
+
+            glm::quat rotation;
+            glm::vec3 translation;
+            glm::vec3 _scale;
+            glm::vec3 _skew;
+            glm::vec4 _perspective;
+
+            glm::decompose(current_transform, _scale, rotation, translation,
+                           _skew,_perspective);
+            rotation = glm::conjugate(rotation);
+
+            _camera_right = glm::normalize(fast_rotate(rotation, _camera_right));
+            _camera_up = glm::normalize(fast_rotate(rotation, _camera_up));
+            _camera_forward = glm::normalize(fast_rotate(rotation, _camera_forward));
+            _camera_position = translation;
+
+            _camera_initialized = true;
+        }
+    }
+
+    if (document["nodes"][node_num].HasMember("mesh")) {
+        int mesh_num = document["nodes"][node_num]["mesh"].GetInt();
+        auto mesh_primitives = document["meshes"][mesh_num]["primitives"].GetArray();
+
+        for (int primitive_num = 0; primitive_num < mesh_primitives.Size(); ++primitive_num) {
+            int indices_accessor_num = mesh_primitives[primitive_num]["indices"].GetInt();
+            int indices_buffer_view_num = document["accessors"][indices_accessor_num]["bufferView"].GetInt();
+
+            int indices_buffer_num = document["bufferViews"][indices_buffer_view_num]["buffer"].GetInt();
+            int indices_buffer_offset = document["bufferViews"][indices_buffer_view_num]["byteOffset"].GetInt();
+
+            unsigned char* indices_buffer = _buffers[indices_buffer_num].data() + indices_buffer_offset;
+
+            int indices_count = document["accessors"][indices_accessor_num]["count"].GetInt();
+
+            std::vector<unsigned int> indices;
+            if (document["accessors"][indices_accessor_num]["componentType"].GetInt() == 5123)
+                indices = get_numbers_from_buffer<unsigned short>(indices_buffer, indices_count);
+            else if (document["accessors"][indices_accessor_num]["componentType"].GetInt() == 5125)
+                indices = get_numbers_from_buffer<unsigned int>(indices_buffer, indices_count);
+            else
+                exit(937423984);
+
+            int positions_accessor_num = mesh_primitives[primitive_num]["attributes"]["POSITION"].GetInt();
+            int positions_buffer_view_num = document["accessors"][positions_accessor_num]["bufferView"].GetInt();
+
+            int positions_buffer_num = document["bufferViews"][positions_buffer_view_num]["buffer"].GetInt();
+            int positions_buffer_offset = document["bufferViews"][positions_buffer_view_num]["byteOffset"].GetInt();
+
+            unsigned char* positions_buffer = _buffers[positions_buffer_num].data() + positions_buffer_offset;
+
+            int positions_count = document["accessors"][positions_accessor_num]["count"].GetInt();
+
+            if (document["accessors"][positions_accessor_num]["componentType"].GetInt() != 5126)
+                exit(937423985);
+            std::vector<glm::vec3> positions = get_vec3s_from_buffer(positions_buffer, positions_count);
+
+            for (int i = 0; i < indices.size(); i += 3) {
+                glm::vec3 a = glm::vec3(current_transform * glm::vec4(positions[indices[i]], 1));
+                glm::vec3 b = glm::vec3(current_transform * glm::vec4(positions[indices[i + 1]], 1));
+                glm::vec3 c = glm::vec3(current_transform * glm::vec4(positions[indices[i + 2]], 1));
+
+                auto p = std::make_unique<Primitive>(a, b, c);
+                p->set_color({1, 1, 1}); // TODO: actual color (and material)
+
+                _primitives.push_back(std::move(p));
+            }
+        }
+    }
+
+    if (document["nodes"][node_num].HasMember("children")) {
+        auto children_array = document["nodes"][node_num]["children"].GetArray();
+        for (int i = 0; i < children_array.Size(); ++i)
+            initialize_node(document, document["nodes"][node_num]["children"][i].GetInt(), current_transform);
+    }
+}
+
+void Scene::initialize_node(const rapidjson::Document& document, int node_num) {
+    initialize_node(document, node_num, glm::mat4(1.0f));
+}
+
+Scene::Scene(const rapidjson::Document& document, int width, int height) {
+    _dimension_width = width;
+    _dimension_height = height;
+
+    int max_thead_num = omp_get_max_threads();
+    for (int i = 0; i < max_thead_num; ++i)
+        _random_engines.push_back(std::make_unique<RandomEngine>(i));
+
+    auto buffers_array = document["buffers"].GetArray();
+    for (int i = 0; i < buffers_array.Size(); ++i) {
+        auto buffer_file = buffers_array[i]["uri"].GetString();
+
+        std::ifstream in_stream(buffer_file, std::ios::binary);
+        std::vector<unsigned char> buffer(std::istreambuf_iterator<char>(in_stream), {});
+        _buffers.push_back(buffer);
+    }
+
+    if (not document.HasMember("scene"))
+        exit(120837125);
+    int scene_num = document["scene"].GetInt();
+
+    auto nodes_array = document["scenes"][scene_num]["nodes"].GetArray();
+
+    for (int i = 0; i < nodes_array.Size(); ++i) {
+        int node_num = nodes_array[i].GetInt();
+        initialize_node(document, node_num);
+    }
+
+    _distribution = std::unique_ptr<Distribution>(new CosineHemisphere()); // TODO: add LightSource Distributions.
+
+    _bg_color = {1, 1, 1}; // TODO: delete
+}
+
+/*
 Scene::Scene(std::ifstream& in_stream) {
     int max_thead_num = omp_get_max_threads();
     for (int i = 0; i < max_thead_num; ++i)
@@ -514,6 +730,7 @@ Scene::Scene(std::ifstream& in_stream) {
         _distribution = std::unique_ptr<Distribution>(new Mix(std::move(distributions)));
     }
 }
+*/
 
 std::pair<float, Primitive*> Scene::get_t(glm::vec3 O, glm::vec3 D) const {
     float t = -1;
@@ -554,20 +771,20 @@ glm::vec3 Scene::get_color(glm::vec3 O, glm::vec3 D) const {
     return get_color(O, D, 1);
 }
 
-std::vector<uint8_t> Scene::render() const {
+std::vector<uint8_t> Scene::render(int samples) const {
     std::vector<uint8_t> render(3 * _dimension_width * _dimension_height, 0);
 
-    float tan_half_fov_x = tanf(_camera_fov_x / 2);
-    float tan_half_fov_y = tan_half_fov_x / (float) _dimension_width * (float) _dimension_height;
+    float tan_half_fov_y = tanf(_camera_fov_y / 2);
+    float tan_half_fov_x = tan_half_fov_y / (float) _dimension_height * (float) _dimension_width;
 
     std::uniform_real_distribution<float> distribution(0, 1);
 
-    #pragma omp parallel for collapse(2) default(none) shared(distribution, tan_half_fov_x, tan_half_fov_y, render)
+    #pragma omp parallel for collapse(2) default(none) shared(samples, distribution, tan_half_fov_x, tan_half_fov_y, render)
     for (int p_x = 0; p_x < _dimension_width; ++p_x) {
         for (int p_y = 0; p_y < _dimension_height; ++p_y) {
             auto color_sum = glm::vec3(0);
 
-            for (int curr_sample = 0; curr_sample < _sample_num; ++curr_sample) {
+            for (int curr_sample = 0; curr_sample < samples; ++curr_sample) {
                 auto curr_random_engine = random_engine(omp_get_thread_num());
                 float u_x = distribution(*curr_random_engine);
                 float u_y = distribution(*curr_random_engine);
@@ -582,7 +799,7 @@ std::vector<uint8_t> Scene::render() const {
                 color_sum += get_color(O, D);
             }
 
-            color_sum /= _sample_num;
+            color_sum /= samples;
             check_color(color_sum, 384763);
 
             color_sum = aces_tonemap(color_sum);

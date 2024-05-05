@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.16.3)
 project(Raytracing)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(glm)
+add_subdirectory(rapidjson)
 
 add_executable(Raytracing
         main.cpp
@@ -17,6 +18,7 @@ add_executable(Raytracing
 target_include_directories(Raytracing PUBLIC "${CMAKE_CURRENT_LIST_DIR}")
 
 target_link_libraries(Raytracing PUBLIC glm)
+target_link_libraries(Raytracing PUBLIC RapidJSON)
 
 find_package(OpenMP)
 if (OpenMP_CXX_FOUND)

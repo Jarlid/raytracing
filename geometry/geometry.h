@@ -89,6 +89,7 @@ private:
 
 public:
     explicit Triangle(std::istream& in_stream);
+    Triangle(glm::vec3 a, glm::vec3 b, glm::vec3 c);
 
     std::pair<float, float> get_ts(glm::vec3 O, glm::vec3 D) override;
     glm::vec3 get_normal(glm::vec3 P) override;
@@ -121,6 +122,9 @@ private:
 
 public:
     explicit Primitive(std::istream& in_stream);
+    Primitive(glm::vec3 a, glm::vec3 b, glm::vec3 c);
+
+    void set_color(glm::vec3 color);
 
     bool is_plane();
     bool has_emission();
