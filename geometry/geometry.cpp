@@ -10,8 +10,6 @@
 
 #include <omp.h>
 
-#include <glm/gtx/matrix_decompose.hpp>
-
 glm::vec3 stream_vec3(std::istream& in_stream) {
     float x, y, z = 0;
     in_stream >> x >> y >> z;
@@ -489,8 +487,7 @@ std::vector<glm::vec3> get_vec3s_from_buffer(unsigned char* buffer, int count) {
 
 void Scene::initialize_node(const rapidjson::Document& document, int node_num, glm::mat4 current_transform) {
     if (document["nodes"][node_num].HasMember("matrix"))
-        current_transform =
-                get_mat4_from_array(document["nodes"][node_num]["matrix"].GetArray()) * current_transform;
+        current_transform *= get_mat4_from_array(document["nodes"][node_num]["matrix"].GetArray());
     else {
         glm::mat4 additional_transform(1.0f);
 
@@ -514,7 +511,7 @@ void Scene::initialize_node(const rapidjson::Document& document, int node_num, g
             additional_transform = translation_matrix * additional_transform;
         }
 
-        current_transform = additional_transform * current_transform;
+        current_transform *= additional_transform;
     }
 
     if (not _camera_initialized and document["nodes"][node_num].HasMember("camera")) {
@@ -523,20 +520,13 @@ void Scene::initialize_node(const rapidjson::Document& document, int node_num, g
         if (document["cameras"][camera_num]["type"] == "perspective") {
             _camera_fov_y = document["cameras"][camera_num]["perspective"]["yfov"].GetFloat();
 
-            glm::quat rotation;
-            glm::vec3 translation;
-            glm::vec3 _scale;
-            glm::vec3 _skew;
-            glm::vec4 _perspective;
+            glm::vec3 new_camera_position = glm::vec3(current_transform * glm::vec4(_camera_position, 1));
 
-            glm::decompose(current_transform, _scale, rotation, translation,
-                           _skew,_perspective);
-            rotation = glm::conjugate(rotation);
+            _camera_right = glm::normalize(glm::vec3(current_transform * glm::vec4(_camera_right + _camera_position, 1)) - new_camera_position);
+            _camera_up = glm::normalize(glm::vec3(current_transform * glm::vec4(_camera_up + _camera_position, 1)) - new_camera_position);
+            _camera_forward = glm::normalize(glm::vec3(current_transform * glm::vec4(_camera_forward + _camera_position, 1)) - new_camera_position);
 
-            _camera_right = glm::normalize(fast_rotate(rotation, _camera_right));
-            _camera_up = glm::normalize(fast_rotate(rotation, _camera_up));
-            _camera_forward = glm::normalize(fast_rotate(rotation, _camera_forward));
-            _camera_position = translation;
+            _camera_position = new_camera_position;
 
             _camera_initialized = true;
         }
@@ -551,7 +541,8 @@ void Scene::initialize_node(const rapidjson::Document& document, int node_num, g
             int indices_buffer_view_num = document["accessors"][indices_accessor_num]["bufferView"].GetInt();
 
             int indices_buffer_num = document["bufferViews"][indices_buffer_view_num]["buffer"].GetInt();
-            int indices_buffer_offset = document["bufferViews"][indices_buffer_view_num]["byteOffset"].GetInt();
+            int indices_buffer_offset = document["bufferViews"][indices_buffer_view_num]["byteOffset"].GetInt() +
+                                        document["accessors"][indices_accessor_num]["byteOffset"].GetInt();
 
             unsigned char* indices_buffer = _buffers[indices_buffer_num].data() + indices_buffer_offset;
 
@@ -569,7 +560,8 @@ void Scene::initialize_node(const rapidjson::Document& document, int node_num, g
             int positions_buffer_view_num = document["accessors"][positions_accessor_num]["bufferView"].GetInt();
 
             int positions_buffer_num = document["bufferViews"][positions_buffer_view_num]["buffer"].GetInt();
-            int positions_buffer_offset = document["bufferViews"][positions_buffer_view_num]["byteOffset"].GetInt();
+            int positions_buffer_offset = document["bufferViews"][positions_buffer_view_num]["byteOffset"].GetInt() +
+                                          document["accessors"][positions_accessor_num]["byteOffset"].GetInt();
 
             unsigned char* positions_buffer = _buffers[positions_buffer_num].data() + positions_buffer_offset;
 
@@ -670,8 +662,7 @@ Scene::Scene(const rapidjson::Document& document, int width, int height) {
         auto nodes_array = document["nodes"].GetArray();
 
         for (int i = 0; i < nodes_array.Size(); ++i) {
-            int node_num = nodes_array[i].GetInt();
-            initialize_node(document, node_num);
+            initialize_node(document, i);
         }
     }
 
