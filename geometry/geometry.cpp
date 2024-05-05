@@ -604,15 +604,22 @@ Scene::Scene(const rapidjson::Document& document, int width, int height) {
         _buffers.push_back(buffer);
     }
 
-    if (not document.HasMember("scene"))
-        exit(120837125);
-    int scene_num = document["scene"].GetInt();
+    if (document.HasMember("scene")) {
+        int scene_num = document["scene"].GetInt();
+        auto nodes_array = document["scenes"][scene_num]["nodes"].GetArray();
 
-    auto nodes_array = document["scenes"][scene_num]["nodes"].GetArray();
+        for (int i = 0; i < nodes_array.Size(); ++i) {
+            int node_num = nodes_array[i].GetInt();
+            initialize_node(document, node_num);
+        }
+    }
+    else {
+        auto nodes_array = document["nodes"].GetArray();
 
-    for (int i = 0; i < nodes_array.Size(); ++i) {
-        int node_num = nodes_array[i].GetInt();
-        initialize_node(document, node_num);
+        for (int i = 0; i < nodes_array.Size(); ++i) {
+            int node_num = nodes_array[i].GetInt();
+            initialize_node(document, node_num);
+        }
     }
 
     _distribution = std::unique_ptr<Distribution>(new CosineHemisphere()); // TODO: add LightSource Distributions.
