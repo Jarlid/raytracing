@@ -614,7 +614,9 @@ void Scene::initialize_node(const rapidjson::Document& document, int node_num, g
                 primitive->set_material(material);
                 primitive->set_emission(emission);
 
-                // TODO: add emissive materials to light sources.
+                if (primitive->has_emission())
+                    _light_sources.push_back(
+                        std::move(std::unique_ptr<Distribution>(new LightSource(*primitive))));
 
                 _primitives.push_back(std::move(primitive));
             }
@@ -666,7 +668,24 @@ Scene::Scene(const rapidjson::Document& document, int width, int height) {
         }
     }
 
-    _distribution = std::unique_ptr<Distribution>(new CosineHemisphere()); // TODO: add LightSource Distributions.
+    if (_light_sources.empty())
+        _distribution = std::unique_ptr<Distribution>(new CosineHemisphere());
+    else if (_light_sources.size() == 1) {
+        std::vector<std::unique_ptr<Distribution>> distributions;
+
+        distributions.push_back(std::unique_ptr<Distribution>(new CosineHemisphere()));
+        distributions.push_back(std::move(_light_sources[0]));
+
+        _distribution = std::unique_ptr<Distribution>(new Mix(std::move(distributions)));
+    }
+    else {
+        std::vector<std::unique_ptr<Distribution>> distributions;
+
+        distributions.push_back(std::unique_ptr<Distribution>(new CosineHemisphere()));
+        distributions.push_back(std::unique_ptr<Distribution>(new Mix(std::move(_light_sources))));
+
+        _distribution = std::unique_ptr<Distribution>(new Mix(std::move(distributions)));
+    }
 }
 
 /*

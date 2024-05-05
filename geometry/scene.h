@@ -33,6 +33,7 @@ private:
     std::unique_ptr<Distribution> _distribution;
 
     std::vector<std::vector<unsigned char>> _buffers;
+    std::vector<std::unique_ptr<Distribution>> _light_sources;
 
 public:
     void initialize_node(const rapidjson::Document& document, int node_num, glm::mat4 current_transform);
