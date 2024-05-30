@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "distributions/distributions.h"
+#include "hierarchy/hierarchy.h"
 
 class Scene {
 private:
@@ -27,6 +28,8 @@ private:
     std::vector<std::unique_ptr<RandomEngine>> _random_engines;
 
     std::unique_ptr<Distribution> _distribution;
+
+    BVH _bvh;
 
 public:
     explicit Scene(std::ifstream& in_stream);

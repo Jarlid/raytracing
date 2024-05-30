@@ -94,6 +94,12 @@ float Plane::get_point_pdf(glm::vec3 P) {
     exit(498724);
 }
 
+AABB Plane::get_aabb() {
+    AABB aabb;
+    aabb.make_infinite();
+    return aabb;
+}
+
 Ellipsoid::Ellipsoid(std::istream& in_stream) {
     _r = stream_vec3(in_stream);
 }
@@ -136,8 +142,19 @@ float Ellipsoid::get_point_pdf(glm::vec3 P) {
     return 0.25f / (float) M_PI / sqrtf(N.x * N.x * R2.y * R2.z + R2.x * N.y * N.y * R2.z + R2.x * R2.y * N.z * N.z);
 }
 
+AABB Ellipsoid::get_aabb() {
+    AABB aabb;
+    aabb.extend(_r);
+    aabb.extend(-_r);
+    return aabb;
+}
+
 Box::Box(std::istream& in_stream) {
     _s = stream_vec3(in_stream);
+}
+
+Box::Box(glm::vec3 s) {
+    _s = s;
 }
 
 std::pair<float, float> Box::get_ts(glm::vec3 O, glm::vec3 D) {
@@ -196,6 +213,13 @@ float Box::get_point_pdf(glm::vec3 P) {
     return 1.f / 8 / (_s.y * _s.z + _s.x * _s.z + _s.y * _s.z);
 }
 
+AABB Box::get_aabb() {
+    AABB aabb;
+    aabb.extend(_s);
+    aabb.extend(-_s);
+    return aabb;
+}
+
 Triangle::Triangle(std::istream &in_stream) {
     _a = stream_vec3(in_stream);
     _b = stream_vec3(in_stream);
@@ -230,6 +254,14 @@ glm::vec3 Triangle::get_random_point(RandomEngine &random_engine) {
 
 float Triangle::get_point_pdf(glm::vec3 P) {
     return 2 / glm::length(glm::cross(_b - _a, _c - _a));
+}
+
+AABB Triangle::get_aabb() {
+    AABB aabb;
+    aabb.extend(_a);
+    aabb.extend(_b);
+    aabb.extend(_c);
+    return aabb;
 }
 
 Primitive::Primitive(std::istream& in_stream) {
@@ -405,6 +437,13 @@ float Primitive::get_point_pdf(glm::vec3 P) {
     return _geometry->get_point_pdf(P);
 }
 
+AABB Primitive::get_aabb() {
+    AABB aabb = _geometry->get_aabb();
+    aabb.rotate(_rotation);
+    aabb.move(_position);
+    return aabb;
+}
+
 Scene::Scene(std::ifstream& in_stream) {
     int max_thead_num = omp_get_max_threads();
     for (int i = 0; i < max_thead_num; ++i)
@@ -493,6 +532,8 @@ Scene::Scene(std::ifstream& in_stream) {
         _primitives.push_back(std::move(primitive));
     }
 
+    _bvh = BVH(&_primitives);
+
     _distribution = std::unique_ptr<Distribution>(new CosineHemisphere());
 
     if (light_sources.empty())
@@ -516,18 +557,14 @@ Scene::Scene(std::ifstream& in_stream) {
 }
 
 std::pair<float, Primitive*> Scene::get_t(glm::vec3 O, glm::vec3 D) const {
-    float t = -1;
-    Primitive* curr_primitive = nullptr;
+    float t;
+    int primitive_id;
 
-    for (auto& primitive : _primitives) {
-        float new_t = primitive->get_t(O, D);
-        if (t <= 0 or (new_t > 0 and new_t < t)) {
-            t = new_t;
-            curr_primitive = primitive.get();
-        }
-    }
+    std::tie(t, primitive_id) = _bvh.get_t(O, D);
 
-    return {t, curr_primitive};
+    if (t < 0 || primitive_id < 0)
+        return {-1, nullptr};
+    return {t, _primitives[primitive_id].get()};
 }
 
 glm::vec3 Scene::get_color(glm::vec3 O, glm::vec3 D, int recursion_depth) const {

@@ -12,7 +12,10 @@ add_executable(Raytracing
         geometry/scene.h
         distributions/distributions.cpp
         distributions/distributions.h
-        distributions/engine.h)
+        distributions/engine.h
+        hierarchy/hierarchy.cpp
+        hierarchy/hierarchy.h
+        hierarchy/aabb.h)
 
 target_include_directories(Raytracing PUBLIC "${CMAKE_CURRENT_LIST_DIR}")
 

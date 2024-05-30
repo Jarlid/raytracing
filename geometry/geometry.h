@@ -12,6 +12,7 @@
 #include <glm/gtx/quaternion.hpp>
 
 #include "distributions/engine.h"
+#include "hierarchy/aabb.h"
 
 #define GAMMA (1 / 2.2)
 #define EPSILON 0.0001f
@@ -31,12 +32,12 @@ public:
     virtual bool is_plane();
 
     virtual std::pair<float, float> get_ts(glm::vec3 O, glm::vec3 D) = 0; // Формула: P = O + t * D
-    // It's so hard to not joke about TS...
-    // But either way, I'm gonna go preorder TTPD.
     virtual glm::vec3 get_normal(glm::vec3 P) = 0;
 
     virtual glm::vec3 get_random_point(RandomEngine& random_engine) = 0;
     virtual float get_point_pdf(glm::vec3 P) = 0;
+
+    virtual AABB get_aabb() = 0;
 };
 
 struct Plane: Geometry {
@@ -53,6 +54,8 @@ public:
 
     glm::vec3 get_random_point(RandomEngine& random_engine) override;
     float get_point_pdf(glm::vec3 P) override;
+
+    AABB get_aabb() override;
 };
 
 struct Ellipsoid: Geometry {
@@ -67,6 +70,8 @@ public:
 
     glm::vec3 get_random_point(RandomEngine& random_engine) override;
     float get_point_pdf(glm::vec3 P) override;
+
+    AABB get_aabb() override;
 };
 
 struct Box: Geometry {
@@ -75,12 +80,15 @@ private:
 
 public:
     explicit Box(std::istream& in_stream);
+    explicit Box(glm::vec3 s);
 
     std::pair<float, float> get_ts(glm::vec3 O, glm::vec3 D) override;
     glm::vec3 get_normal(glm::vec3 P) override;
 
     glm::vec3 get_random_point(RandomEngine& random_engine) override;
     float get_point_pdf(glm::vec3 P) override;
+
+    AABB get_aabb() override;
 };
 
 struct Triangle: Geometry {
@@ -95,6 +103,8 @@ public:
 
     glm::vec3 get_random_point(RandomEngine& random_engine) override;
     float get_point_pdf(glm::vec3 P) override;
+
+    AABB get_aabb() override;
 };
 
 enum class Material {
@@ -133,4 +143,6 @@ public:
 
     glm::vec3 get_random_point(RandomEngine& random_engine);
     float get_point_pdf(glm::vec3 P);
+
+    AABB get_aabb();
 };
