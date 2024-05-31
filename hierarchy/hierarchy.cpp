@@ -13,6 +13,10 @@ void AABB::make_infinite() {
     _is_infinite = true;
 }
 
+bool AABB::is_infinite() {
+    return _is_infinite;
+}
+
 void AABB::replace_with(AABB aabb) {
     _min = aabb._min;
     _max = aabb._max;
@@ -98,6 +102,8 @@ BVH::BVH() {
 
 BVH::BVH(std::vector<Primitive*>* primitives) {
     _primitives = primitives;
+    for (auto &primitive: *_primitives)
+        _has_infinite |= primitive->get_aabb().is_infinite();
     _root = add_node(0, (int) primitives->size());
 }
 
@@ -120,17 +126,30 @@ int BVH::add_node(int first_primitive_id, int primitive_count) {
         return id;
     }
 
-    int cut_axis;
-    float cut_coord;
-    std::tie(cut_axis, cut_coord) = _nodes[id].aabb.get_cut();
-
-    auto partition_function = [&cut_axis, &cut_coord](Primitive* &primitive){
-        return primitive->get_aabb().divide(cut_axis, cut_coord);
-    };
-
     auto begin = _primitives->begin() + first_primitive_id;
     auto end = _primitives->begin() + first_primitive_id + primitive_count;
-    auto part = std::partition(begin, end, partition_function);
+
+    auto part = _primitives->begin();
+    if (_has_infinite) {
+        auto partition_function = [](Primitive* &primitive){
+            return primitive->get_aabb().is_infinite();
+        };
+
+        part = std::partition(begin, end, partition_function);
+    }
+    else {
+        int cut_axis;
+        float cut_coord;
+        std::tie(cut_axis, cut_coord) = _nodes[id].aabb.get_cut();
+
+        auto partition_function = [&cut_axis, &cut_coord](Primitive* &primitive){
+            return primitive->get_aabb().divide(cut_axis, cut_coord);
+        };
+
+        part = std::partition(begin, end, partition_function);
+    }
+
+    _has_infinite = false;
 
     begin = _primitives->begin() + first_primitive_id;
     end = _primitives->begin() + first_primitive_id + primitive_count;

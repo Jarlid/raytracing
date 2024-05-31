@@ -24,6 +24,7 @@ struct Node {
 class BVH {
 private:
     std::vector<Primitive*>* _primitives;
+    bool _has_infinite = false;
 
     std::vector<Node> _nodes;
     int _root;

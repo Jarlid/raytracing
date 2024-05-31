@@ -16,6 +16,7 @@ public:
     AABB() = default;
 
     void make_infinite();
+    bool is_infinite();
 
     void replace_with(AABB aabb);
 
