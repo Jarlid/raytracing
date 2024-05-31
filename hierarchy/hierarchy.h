@@ -23,18 +23,20 @@ struct Node {
 
 class BVH {
 private:
-    std::vector<std::unique_ptr<Primitive>>* _primitives;
+    std::vector<Primitive*>* _primitives;
 
     std::vector<Node> _nodes;
     int _root;
 
 public:
     BVH();
-    BVH(std::vector<std::unique_ptr<Primitive>>* primitives);
+    BVH(std::vector<Primitive*>* primitives);
 
     int add_node(int first_primitive_id, int primitive_count);
 
-    std::pair<float, int> get_t_for(int node_id, glm::vec3 O, glm::vec3 D,
-                                    float border_t, int border_primitive_id) const;
+    std::pair<float, int> get_t_for(int node_id, glm::vec3 O, glm::vec3 D, float border_t, int border_primitive_id,
+                                    std::vector<int>* _intersected_primitives, bool fast_mode) const;
+
     std::pair<float, int> get_t(glm::vec3 O, glm::vec3 D) const;
+    std::vector<int> get_intersected_primitives(glm::vec3 O, glm::vec3 D) const;
 };

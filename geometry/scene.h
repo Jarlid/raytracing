@@ -19,7 +19,7 @@ private:
 
     float _camera_fov_x = 0;
 
-    std::vector<std::unique_ptr<Primitive>> _primitives;
+    std::vector<Primitive*> _primitives;
 
     int _ray_depth = 1;
 

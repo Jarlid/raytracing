@@ -1,6 +1,7 @@
 #include "distributions.h"
 
 #include <cmath>
+#include <utility>
 
 glm::vec3 UniformHemisphere::sample(glm::vec3 P, glm::vec3 N, RandomEngine& random_engine) {
     float x, y, z;
@@ -88,6 +89,29 @@ float Mix::pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) {
 
     for (auto & _inner_distribution : _inner_distributions)
         pdf += _inner_distribution->pdf(P, N, D);
+
+    return pdf / (float) _inner_distributions.size();
+}
+
+LightSourceMix::LightSourceMix(std::vector<Primitive*> primitives) {
+    _primitives = std::move(primitives);
+    _bvh = BVH(&_primitives);
+
+    for (auto primitive: _primitives)
+        _inner_distributions.push_back(std::make_unique<LightSource>(*primitive));
+}
+
+glm::vec3 LightSourceMix::sample(glm::vec3 P, glm::vec3 N, RandomEngine &random_engine) {
+    int i = (int) (_base_distribution(random_engine) * (float) _inner_distributions.size());
+    return _inner_distributions[i]->sample(P, N, random_engine);
+}
+
+float LightSourceMix::pdf(glm::vec3 P, glm::vec3 N, glm::vec3 D) {
+    std::vector<int> intersected_primitive_ids = _bvh.get_intersected_primitives(P, D);
+
+    float pdf = 0;
+    for (int id: intersected_primitive_ids)
+        pdf += _inner_distributions[id]->pdf(P, N, D);
 
     return pdf / (float) _inner_distributions.size();
 }

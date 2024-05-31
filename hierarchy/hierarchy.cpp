@@ -96,7 +96,7 @@ BVH::BVH() {
     _root = -1;
 }
 
-BVH::BVH(std::vector<std::unique_ptr<Primitive>>* primitives) {
+BVH::BVH(std::vector<Primitive*>* primitives) {
     _primitives = primitives;
     _root = add_node(0, (int) primitives->size());
 }
@@ -124,7 +124,7 @@ int BVH::add_node(int first_primitive_id, int primitive_count) {
     float cut_coord;
     std::tie(cut_axis, cut_coord) = _nodes[id].aabb.get_cut();
 
-    auto partition_function = [&cut_axis, &cut_coord](std::unique_ptr<Primitive> &primitive){
+    auto partition_function = [&cut_axis, &cut_coord](Primitive* &primitive){
         return primitive->get_aabb().divide(cut_axis, cut_coord);
     };
 
@@ -154,26 +154,28 @@ int BVH::add_node(int first_primitive_id, int primitive_count) {
     return id;
 }
 
-std::pair<float, int> BVH::get_t_for(int node_id, glm::vec3 O, glm::vec3 D,
-                                     float border_t, int border_primitive_id) const {
+std::pair<float, int> BVH::get_t_for(int node_id, glm::vec3 O, glm::vec3 D, float border_t, int border_primitive_id,
+                                     std::vector<int>* intersected_primitive_ids, bool fast_mode) const {
     const Node &node = _nodes[node_id];
     D = glm::normalize(D);
 
-    if (not node.aabb.is_intersected(O, D, border_t))
+    if (not node.aabb.is_intersected(O, D, fast_mode ? border_t : -F_INF))
         return {border_t, border_primitive_id};
 
     if (node.right_child != -1) {
         float tmp_t = border_t;
         int tmp_primitive_id = border_primitive_id;
 
-        std::tie(tmp_t, tmp_primitive_id) = get_t_for(node.right_child, O, D, border_t, border_primitive_id);
+        std::tie(tmp_t, tmp_primitive_id) = get_t_for(node.right_child, O, D, border_t, border_primitive_id,
+                                                      intersected_primitive_ids, fast_mode);
 
         if (tmp_t > 0 && (tmp_t < border_t || border_t < 0)) {
             border_t = tmp_t;
             border_primitive_id = tmp_primitive_id;
         }
 
-        std::tie(tmp_t, tmp_primitive_id) = get_t_for(node.left_child, O, D, border_t, border_primitive_id);
+        std::tie(tmp_t, tmp_primitive_id) = get_t_for(node.left_child, O, D, border_t, border_primitive_id,
+                                                      intersected_primitive_ids, fast_mode);
 
         if (tmp_t > 0 && (tmp_t < border_t || border_t < 0)) {
             border_t = tmp_t;
@@ -187,6 +189,10 @@ std::pair<float, int> BVH::get_t_for(int node_id, glm::vec3 O, glm::vec3 D,
              ++primitive_id) {
             float tmp_t = (*_primitives)[primitive_id]->get_t(O, D);
 
+            if (tmp_t > 0 && !fast_mode) {
+                intersected_primitive_ids->push_back(primitive_id);
+            }
+
             if (tmp_t > 0 && (tmp_t < border_t || border_t < 0)) {
                 border_t = tmp_t;
                 border_primitive_id = primitive_id;
@@ -198,5 +204,12 @@ std::pair<float, int> BVH::get_t_for(int node_id, glm::vec3 O, glm::vec3 D,
 }
 
 std::pair<float, int> BVH::get_t(glm::vec3 O, glm::vec3 D) const {
-    return get_t_for(_root, O, D, -F_INF, -1);
+    return get_t_for(_root, O, D, -F_INF, -1, nullptr, true);
+}
+
+std::vector<int> BVH::get_intersected_primitives(glm::vec3 O, glm::vec3 D) const {
+    std::vector<int> intersected_primitive_ids;
+    get_t_for(_root, O, D, -F_INF, -1,
+              &intersected_primitive_ids, false);
+    return intersected_primitive_ids;
 }

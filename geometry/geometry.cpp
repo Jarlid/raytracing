@@ -454,7 +454,7 @@ Scene::Scene(std::ifstream& in_stream) {
 
     bool new_primitive = false;
 
-    std::vector<std::unique_ptr<Distribution>> light_sources;
+    std::vector<Primitive*> light_sources;
 
     while (in_stream >> command) {
         std::transform(command.begin(), command.end(), command.begin(), ::toupper);
@@ -503,13 +503,12 @@ Scene::Scene(std::ifstream& in_stream) {
             if (new_primitive) {
                 new_primitive = false;
 
-                std::unique_ptr<Primitive> primitive = std::make_unique<Primitive>(primitive_stream);
+                auto* primitive = new Primitive(primitive_stream);
 
                 if (not primitive->is_plane() and primitive->has_emission())
-                    light_sources.push_back(
-                            std::move(std::unique_ptr<Distribution>(new LightSource(*primitive))));
+                    light_sources.push_back(primitive);
 
-                _primitives.push_back(std::move(primitive));
+                _primitives.push_back(primitive);
             }
         }
         if (not_primitive_or_light)
@@ -524,17 +523,15 @@ Scene::Scene(std::ifstream& in_stream) {
     }
 
     if (new_primitive) {
-        auto primitive = std::make_unique<Primitive>(primitive_stream);
+        auto* primitive = new Primitive(primitive_stream);
 
         if (not primitive->is_plane() and primitive->has_emission())
-            light_sources.push_back(std::move(std::unique_ptr<Distribution>(new LightSource(*primitive))));
+            light_sources.push_back(primitive);
 
-        _primitives.push_back(std::move(primitive));
+        _primitives.push_back(primitive);
     }
 
     _bvh = BVH(&_primitives);
-
-    _distribution = std::unique_ptr<Distribution>(new CosineHemisphere());
 
     if (light_sources.empty())
         _distribution = std::unique_ptr<Distribution>(new CosineHemisphere());
@@ -542,7 +539,7 @@ Scene::Scene(std::ifstream& in_stream) {
         std::vector<std::unique_ptr<Distribution>> distributions;
 
         distributions.push_back(std::unique_ptr<Distribution>(new CosineHemisphere()));
-        distributions.push_back(std::move(light_sources[0]));
+        distributions.push_back(std::make_unique<LightSource>(*light_sources[0]));
 
         _distribution = std::unique_ptr<Distribution>(new Mix(std::move(distributions)));
     }
@@ -550,7 +547,7 @@ Scene::Scene(std::ifstream& in_stream) {
         std::vector<std::unique_ptr<Distribution>> distributions;
 
         distributions.push_back(std::unique_ptr<Distribution>(new CosineHemisphere()));
-        distributions.push_back(std::unique_ptr<Distribution>(new Mix(std::move(light_sources))));
+        distributions.push_back(std::unique_ptr<Distribution>(new LightSourceMix(std::move(light_sources))));
 
         _distribution = std::unique_ptr<Distribution>(new Mix(std::move(distributions)));
     }
@@ -564,7 +561,7 @@ std::pair<float, Primitive*> Scene::get_t(glm::vec3 O, glm::vec3 D) const {
 
     if (t < 0 || primitive_id < 0)
         return {-1, nullptr};
-    return {t, _primitives[primitive_id].get()};
+    return {t, _primitives[primitive_id]};
 }
 
 glm::vec3 Scene::get_color(glm::vec3 O, glm::vec3 D, int recursion_depth) const {
